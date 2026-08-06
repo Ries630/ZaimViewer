@@ -1,5 +1,6 @@
 # 認証情報
 .env
+worker/.dev.vars
 
 # ミラーDB（使い捨て。再同期で再生成できる）
 data/
@@ -15,3 +16,8 @@ __pycache__/
 # PWA
 web/node_modules/
 web/dist/
+
+# Worker
+worker/node_modules/
+worker/.wrangler/
+worker/worker-configuration.d.ts
