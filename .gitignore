@@ -8,3 +8,10 @@ data/
 __pycache__/
 *.pyc
 .venv/
+
+# テスト
+.pytest_cache/
+
+# PWA
+web/node_modules/
+web/dist/

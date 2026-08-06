@@ -29,6 +29,19 @@ class Settings:
     db_path: Path
 
 
+def resolve_db_path() -> Path:
+    """ミラー DB の配置先だけを解決する。
+
+    読み取り API は Zaim の認証情報を必要としないため、
+    load_settings() を呼ばずに DB パスだけを得られるようにしている。
+
+    Returns:
+        ミラー SQLite ファイルのパス。
+    """
+    load_dotenv(PROJECT_ROOT / ".env")
+    return Path(os.environ.get("ZAIMVIEWER_DB", PROJECT_ROOT / "data" / "zaim.db"))
+
+
 def load_settings() -> Settings:
     """.env と環境変数から設定を構築する。
 
@@ -52,7 +65,7 @@ def load_settings() -> Settings:
             raise RuntimeError(f"環境変数 {key} が未設定です（.env を確認）")
         values[key] = value
 
-    db_path = Path(os.environ.get("ZAIMVIEWER_DB", PROJECT_ROOT / "data" / "zaim.db"))
+    db_path = resolve_db_path()
     return Settings(
         consumer_key=values["ZAIM_CONSUMER_KEY"],
         consumer_secret=values["ZAIM_CONSUMER_SECRET"],
