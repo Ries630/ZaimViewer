@@ -126,29 +126,6 @@ export class ZaimClient {
   }
 
   /**
-   * 明細 1 ページ分を未パースの文字列で取得する。
-   *
-   * CPU 時間の計測で、ネットワーク待ちとパース処理を分離するために使う。
-   *
-   * @param page ページ番号（1 始まり）。
-   * @returns レスポンスボディの原文。
-   * @throws HTTP ステータスが 200 以外の場合。
-   */
-  async rawMoneyPage(page: number): Promise<string> {
-    const url = new URL(`${BASE_URL}/home/money`);
-    url.searchParams.set("mapping", "1");
-    url.searchParams.set("limit", String(PAGE_LIMIT));
-    url.searchParams.set("page", String(page));
-
-    const { authorization } = await signRequest("GET", url.toString(), this.#credentials);
-    const res = await fetch(url, { headers: { Authorization: authorization } });
-    if (res.status !== 200) {
-      throw new Error(`Zaim API error ${res.status}`);
-    }
-    return await res.text();
-  }
-
-  /**
    * 全明細をページ単位で順に返す。
    *
    * 日付フィルタを付けず全期間を新しい順に走査する。

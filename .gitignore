@@ -5,19 +5,17 @@ worker/.dev.vars
 # ミラーDB（使い捨て。再同期で再生成できる）
 data/
 
-# Python
-__pycache__/
-*.pyc
-.venv/
-
-# テスト
-.pytest_cache/
+# Worker
+worker/node_modules/
+worker/.wrangler/
+worker/worker-configuration.d.ts
 
 # PWA
 web/node_modules/
 web/dist/
 
-# Worker
-worker/node_modules/
-worker/.wrangler/
-worker/worker-configuration.d.ts
+# 旧 Python 実装の名残（TS 移行済み。手元に残っていても追跡しない）
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/

@@ -6,33 +6,48 @@ Zaim のフィルタ機能が弱く、自動連携の細かな履歴や振替に
 ## 構成
 
 ```
-Zaim API ──同期(Python)──▶ SQLite (data/zaim.db) ◀──read── FastAPI ──▶ PWA (React+Vite)
-                                    ▲                        │
-                                    │              編集プロキシ (OAuth1.0a 署名)
-                              Grafana (:3080)               │
-                              集計・推移                 Zaim 更新 API
+Zaim API ──同期(Cron Trigger)──▶ D1 ◀──read── Hono ──▶ PWA (React+Vite)
+                                              │
+                                    編集プロキシ (OAuth1.0a 署名)
+                                              │
+                                        Zaim 更新 API
 ```
 
-iPhone からは Tailscale 経由で自宅の Mac mini に接続する。
-インターネットに公開せず、認証を自作しないで済ませるため（家計データのため安全側に倒す）。
+すべて 1 つの Worker（`worker/`）に載る。API・同期・PWA 配信が同居するため、
+iPhone からの入口はひとつで、CORS も不要。
 
-## 現在地（2026-08-06）
+## 現在地（2026-08-07）
 
 **工程 ① 同期基盤: 完了。** Zaim 全件 4,362 件（payment 3,266 / income 607 /
-transfer 489、2014-02〜2029-12。未来分は繰り返し登録の家賃）を
-`data/zaim.db` にミラー済み。マスタは categories 46 / genres 129 / accounts 36。
+transfer 489、2014-02〜2029-12。未来分は繰り返し登録の家賃）をミラー済み。
+マスタは categories 46 / genres 129 / accounts 36。
 
-**工程 ② FastAPI: 完了。** `GET /api/transactions`（フィルタ + ページング）、
-`/api/masters`（フィルタ UI の選択肢）、`/api/meta`（同期の鮮度）の 3 本。
-実データでの確認済み: 全 4,362 件 → 振替除外 3,873 → 未来分を隠して 3,833 →
-1,000 円未満のノイズ除外で 1,875 件。
+**工程 ② 読み取り API: 完了。** `GET /api/transactions`（フィルタ + ページング）、
+`/api/masters`（フィルタ UI の選択肢）、`/api/meta`（同期の鮮度）、
+`POST /api/sync`（手動同期）。実データでの確認済み: 全 4,362 件 → 振替除外 3,873
+→ 未来分を隠して 3,833 → 1,000 円未満のノイズ除外で 1,875 件。
 
 **工程 ② PWA: 次はここから。** React + Vite + TypeScript + Tailwind CSS v4。
 明細一覧（無限スクロール）とフィルタパネル。モバイルファースト。
-`web/dist` を FastAPI が配信するため、iPhone からの入口は :8000 ひとつになる。
+ビルド成果物は Workers の Static Assets として同じ Worker から配信する。
 
 **工程 ③ 編集機能: 未着手。** 単体編集 → フィルタ結果への一括編集。
-いずれも Zaim 更新 API へ順次反映する。
+いずれも Zaim 更新 API へ順次反映する。署名側は POST + フォームボディまで
+検証済みなので、`ZaimClient` に更新系メソッドを足すところから始められる。
+
+## 未決の判断
+
+**デプロイ先と課金がまだ決まっていない。** Workers の CPU 時間上限は無料プランだと
+Cron Trigger でも 10ms で、全件同期の実測（約 20ms、ローカル実行値）が収まらない。
+選択肢は次の 3 つで、どれを採っても `worker/src/db.ts` から先だけが変わる。
+
+1. Workers Paid（$5/月）。Cron 30 秒 / HTTP 既定 30 秒。制約を気にせず書ける
+2. 無料枠のまま同期をページ単位の複数 invocation に分割する。実装が複雑になる
+3. 手元（Mac mini）で Bun + SQLite として動かす。CPU 上限は無いが Mac mini 依存が残る
+
+**Cloudflare Access の挙動が未検証。** ホーム画面から起動した PWA でセッションが
+切れたときの再認証の挙動は、実際にデプロイしないと分からない。
+セッション期間は最長 1 か月まで延ばせる。
 
 ## 設計上の決定と理由
 
@@ -46,58 +61,68 @@ transfer 489、2014-02〜2029-12。未来分は繰り返し登録の家賃）を
 
 **編集は必ず Zaim 更新 API を経由する。** ミラーを直接書き換えても Zaim に届かず、
 次の同期で黙って消える。OAuth1.0a の署名鍵はブラウザに置けないため、
-FastAPI 側に編集プロキシを立て、PWA はそこを叩く。
+Worker 側に編集プロキシを立て、PWA はそこを叩く。
 
-**同期はアトミック差し替え方式。** 一時ファイルに全件構築 → `integrity_check` と
-0 件チェック → `os.replace` で差し替える。読み手（FastAPI / Grafana）は常に
-完全な DB だけを見る。認証失敗や API 異常時は既存 DB が無傷で残る。
+**TypeScript + Hono + Workers を選んだ理由。** 当初は Python + FastAPI + ローカル
+SQLite で組んでいたが、(1) 学習対象が TS / Hono / Cloudflare であること、
+(2) Mac mini がスリープしていると iPhone から見られない問題が消えること、
+(3) 定期実行が Cron Trigger で済み launchd を書かずに済むこと、の 3 点で乗り換えた。
+移植時、フィルタの結果が Python 実装と 19 ケースすべてで一致することを確認している。
 
-**SQLite を選んだ理由。** 当初は PostgreSQL 前提だったが、Directus 落選・
-Grafana が同一ホスト・独自データなし（移行 = 再同期）で PG の根拠が全て消えた。
-読み手が同一ホストの 2 プロセスだけなら SQLite で十分。
+**OAuth1.0a の署名は自前実装。** `oauth-1.0a` は同期 API 前提で、非同期の
+`crypto.subtle` と噛み合わない。Web Crypto だけで書けば依存が増えず、
+`nodejs_compat` フラグも要らない（`worker/src/oauth1.ts`）。
+署名は `oauthlib` と一致することを確認済み（記号 `!*'()`・日本語・POST ボディを含む）。
+
+**同期はテーブル差し替え方式。** D1 にはファイル差し替えに相当する操作がないため、
+`*_new` テーブルに全件構築し、`DROP` → `RENAME` → インデックス再作成を単一の
+`batch()` で実行する。`batch()` は 1 トランザクションなので、途中で失敗すれば
+旧テーブルがそのまま残る（故意に失敗させて検証済み）。認証確認と 0 件チェックを
+差し替えより前に置き、API 異常時に空のミラーで上書きしないようにしている。
+
+**DB アクセスは `worker/src/db.ts` のインターフェース越しに行う。** クエリ層が
+`D1Database` を直接参照しないのは、デプロイ先が未決（上記）で、
+手元の SQLite に差し替える可能性を残しているため。`D1Database` はこの形を
+構造的に満たすので、Workers 上では実装を挟まずそのまま渡している。
+
+**API にフィルタの既定値を持たせない。** 「振替を除外」「今日以前だけ」といった
+既定は PWA 側が持ち、API は指定なし = 制限なしに徹する。API 側に暗黙の既定を
+埋めると「全件見たい」ときの外し方が分からなくなり、別の読み手から
+叩いたときに驚くため。
+
+**フィルタの SQL 組み立ては `worker/src/queries.ts` に閉じる。** 「除外はクエリの
+ルールで表現する」の実装箇所。よく使う除外条件に名前を付けるプリセット層を将来
+載せる場合も、その層は `TransactionFilter` を組み立てるだけでよく SQL を書かずに済む。
+プリセットを今作らないのは、どのノイズを消したいかが実データを触りながら
+決まる段階で、固まっていないルールを設定ファイルに固定したくないため。
 
 **汎用ツール（Directus / NocoDB / Metabase）は不採用。** 編集プロキシとして
 バックエンドが必須になった時点で、それらの主価値だった「API 自動生成」が仕事を失った。
 
-**API にフィルタの既定値を持たせない。** 「振替を除外」「今日以前だけ」といった
-既定は PWA 側が持ち、API は指定なし = 制限なしに徹する。API 側に暗黙の既定を
-埋めると「全件見たい」ときの外し方が分からなくなり、Grafana など別の読み手から
-叩いたときに驚くため。
-
-**フィルタの SQL 組み立ては `api/queries.py` に閉じる。** 「除外はクエリのルール
-で表現する」の実装箇所。よく使う除外条件に名前を付けるプリセット層を将来載せる
-場合も、その層は `TransactionFilter` を組み立てるだけでよく SQL を書かずに済む。
-プリセットを今作らないのは、どのノイズを消したいかが実データを触りながら
-決まる段階で、固まっていないルールを設定ファイルに固定したくないため。
-
-**API 接続はリクエストごとに開いて閉じる。** 同期が `os.replace` で DB ファイルを
-差し替えるため、開きっぱなしの接続は差し替え前の古い inode を掴み続け、
-同期しても内容が更新されないように見えてしまう。接続は `mode=ro` で開く。
-
 ## 開発
 
 ```bash
-uv sync
-uv run zaim-sync    # Zaim から全件同期（約 1 分、44 リクエスト）
-uv run zaim-api     # 読み取り API を :8000 で起動（http://localhost:8000/docs）
-uv run pytest       # API とフィルタのテスト
+cd worker
+bun install
+bun run dev         # ローカル D1 で :8787 に起動
+bun run test        # workerd 上で実行（D1 も実物を使う）
+bun run typecheck
+bun run cf-typegen  # wrangler.jsonc 変更後に型を再生成
 ```
 
-`.env` に Zaim の OAuth1.0a 認証情報が必要（`.env.example` 参照）。
-値は `~/.claude.json` の `mcpServers.zaim-api` に設定済みのものと同一。
+同期はローカルでは `curl -X POST http://127.0.0.1:8787/api/sync`（約 17 秒、44 リクエスト）。
 
-環境は Python 3.14 + uv。Docker は自宅の Mac mini 上で稼働（wallos, karakeep,
-cloudflared, Grafana などが同居）。
+`worker/.dev.vars` に Zaim の OAuth1.0a 認証情報が必要（`worker/.dev.vars.example` 参照）。
+値は `~/.claude.json` の `mcpServers.zaim-api` に設定済みのものと同一。
+本番へは `wrangler secret put` で入れる。
 
 ## 運用メモ
 
-- 夜間の定期実行（launchd）は未設定。当面は手動実行
-- Grafana は同一ホストのコンテナ（:3080）。SQLite を読むには
-  `frser-sqlite-datasource` プラグインが必要で、`data/zaim.db` を
-  Grafana コンテナに読み取り専用でマウントする。まだ未設定
-- このリポジトリは `~/Documents` 配下から移動してきた。iCloud 同期下では
-  `.venv` 内の `.pth` に macOS の hidden フラグが付き、Python 3.14 が
-  それを黙って無視して `ModuleNotFoundError` になる。移動により解消済み
+- Grafana（Mac mini の :3080）からミラーを読む構想があったが、D1 へ移したため
+  そのままでは繋がらない。集計・推移が必要になったら、Worker 側に集計エンドポイントを
+  足すか、Grafana の JSON データソースを使う
 - Git はユーザー確認なしにコミットしてよい（このリポジトリのコードはユーザーが直接触らないため）。
   ただし GitHub への push やリポジトリ公開は外部への公開にあたるため確認する
 - コミットは Conventional Commits、本文は日本語
+- 旧 Python 実装（`src/zaimviewer/`、`tests/`）は削除済み。手元の `.venv` と
+  `data/zaim.db` は追跡外なので、不要になれば消してよい
