@@ -13,6 +13,24 @@ Zaim API ──同期(Python)──▶ SQLite (data/zaim.db) ◀──read──
                               集計・推移                 Zaim 更新 API
 ```
 
+iPhone からは Tailscale 経由で自宅の Mac mini に接続する。
+インターネットに公開せず、認証を自作しないで済ませるため（家計データのため安全側に倒す）。
+
+## 現在地（2026-08-06）
+
+**工程 ① 同期基盤: 完了。** Zaim 全件 4,362 件（payment 3,266 / income 607 /
+transfer 489、2014-02〜2029-12。未来分は繰り返し登録の家賃）を
+`data/zaim.db` にミラー済み。マスタは categories 46 / genres 129 / accounts 36。
+
+**工程 ② FastAPI + 最小 PWA: 次はここから。** 明細一覧と、下記フィルタまでを作る。
+
+- 振替の除外（`mode != 'transfer'`）
+- 自動連携の細かいノイズの除外（口座・カテゴリ・金額での絞り込み）
+- 期間・カテゴリでの絞り込み
+
+**工程 ③ 編集機能: 未着手。** 単体編集 → フィルタ結果への一括編集。
+いずれも Zaim 更新 API へ順次反映する。
+
 ## 設計上の決定と理由
 
 **ローカル独自データを一切持たない。** 重要フラグやメモのようなカラムは作らない。
@@ -46,10 +64,20 @@ uv run zaim-sync    # Zaim から全件同期（約 1 分、44 リクエスト�
 ```
 
 `.env` に Zaim の OAuth1.0a 認証情報が必要（`.env.example` 参照）。
+値は `~/.claude.json` の `mcpServers.zaim-api` に設定済みのものと同一。
+
+環境は Python 3.14 + uv。Docker は自宅の Mac mini 上で稼働（wallos, karakeep,
+cloudflared, Grafana などが同居）。
 
 ## 運用メモ
 
 - 夜間の定期実行（launchd）は未設定。当面は手動実行
+- Grafana は同一ホストのコンテナ（:3080）。SQLite を読むには
+  `frser-sqlite-datasource` プラグインが必要で、`data/zaim.db` を
+  Grafana コンテナに読み取り専用でマウントする。まだ未設定
+- このリポジトリは `~/Documents` 配下から移動してきた。iCloud 同期下では
+  `.venv` 内の `.pth` に macOS の hidden フラグが付き、Python 3.14 が
+  それを黙って無視して `ModuleNotFoundError` になる。移動により解消済み
 - Git はユーザー確認なしにコミットしてよい（このリポジトリのコードはユーザーが直接触らないため）。
   ただし GitHub への push やリポジトリ公開は外部への公開にあたるため確認する
 - コミットは Conventional Commits、本文は日本語
