@@ -210,5 +210,5 @@ CI は GitHub Actions（`.github/workflows/ci.yml`）で、PR と main への pu
 - Git はユーザー確認なしにコミットしてよい（このリポジトリのコードはユーザーが直接触らないため）。
   ただし GitHub への push やリポジトリ公開は外部への公開にあたるため確認する
 - コミットは Conventional Commits、本文は日本語
-- 旧 Python 実装（`src/zaimviewer/`、`tests/`）は削除済み。手元の `.venv` と
-  `data/zaim.db` は追跡外なので、不要になれば消してよい
+- 旧 Python 実装は完全に削除済み。`src/zaimviewer/`、`tests/`、`.venv`、
+  `data/zaim.db`、`__pycache__` のいずれも手元に残っていない
