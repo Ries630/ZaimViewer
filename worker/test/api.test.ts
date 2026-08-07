@@ -39,7 +39,7 @@ it("単一指定でも配列として扱われる", async () => {
   const res = await SELF.fetch(url("/api/transactions?mode=transfer"));
   const body = (await res.json()) as { total: number; items: { id: number }[] };
   expect(body.total).toBe(1);
-  expect(body.items[0].id).toBe(7);
+  expect(body.items[0]?.id).toBe(7);
 });
 
 it("合計金額はフィルタ後の値になる", async () => {

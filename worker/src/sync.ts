@@ -66,7 +66,7 @@ export interface SyncResult {
  *
  * @returns 実行順に並んだ DDL 文のリスト。
  */
-function workTableDdl(): string[] {
+export function workTableDdl(): string[] {
   return [
     "DROP TABLE IF EXISTS transactions_new",
     "DROP TABLE IF EXISTS categories_new",
@@ -125,7 +125,7 @@ function workTableDdl(): string[] {
  *
  * @returns 実行順に並んだ SQL 文のリスト。
  */
-function swapSql(): string[] {
+export function swapSql(): string[] {
   const tables = ["transactions", "categories", "genres", "accounts", "sync_meta"];
   return [
     ...tables.map((t) => `DROP TABLE IF EXISTS ${t}`),

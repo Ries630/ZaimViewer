@@ -3,11 +3,12 @@
 import { env } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import type { Database } from "../src/db";
+import { drizzle } from "drizzle-orm/d1";
+
 import { countTransactions, fetchTransactions, type TransactionFilter } from "../src/queries";
 import { seedDatabase } from "./fixtures";
 
-const db: Database = env.DB;
+const db = drizzle(env.DB);
 
 /**
  * フィルタに一致した明細の ID を順序どおりに返す。
@@ -21,7 +22,7 @@ async function ids(filt: TransactionFilter): Promise<number[]> {
 }
 
 beforeAll(async () => {
-  await seedDatabase(db);
+  await seedDatabase(env.DB);
 });
 
 describe("並び順とページング", () => {
@@ -135,10 +136,10 @@ describe("集計", () => {
 describe("レスポンスの列", () => {
   it("明細はマスタ名と ID の両方を持つ", async () => {
     const [row] = await fetchTransactions(db, { q: "おにぎり" }, 1, 0);
-    expect(row.category_id).toBe(101);
-    expect(row.category).toBe("Food");
-    expect(row.genre).toBe("昼食");
-    expect(row.from_account).toBe("PayPay残高");
-    expect(row.to_account).toBeNull();
+    expect(row?.category_id).toBe(101);
+    expect(row?.category).toBe("Food");
+    expect(row?.genre).toBe("昼食");
+    expect(row?.from_account).toBe("PayPay残高");
+    expect(row?.to_account).toBeNull();
   });
 });

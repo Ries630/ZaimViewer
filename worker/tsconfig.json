@@ -6,6 +6,7 @@
     "lib": ["ES2024"],
     "types": ["./worker-configuration.d.ts", "@cloudflare/vitest-pool-workers/types"],
     "strict": true,
+    "noUncheckedIndexedAccess": true,
     "noEmit": true,
     "skipLibCheck": true,
     "verbatimModuleSyntax": true

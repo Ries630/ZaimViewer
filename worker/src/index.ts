@@ -6,12 +6,13 @@
  */
 
 import { zValidator } from "@hono/zod-validator";
+import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
 import { z } from "zod";
 
-import type { Database } from "./db";
 import { type OAuth1Credentials } from "./oauth1";
 import { countTransactions, fetchTransactions, type TransactionFilter } from "./queries";
+import { accounts, categories, genres, syncMeta } from "./schema";
 import { syncAll } from "./sync";
 import { ZaimClient } from "./zaim";
 
@@ -142,7 +143,7 @@ const routes = app
       excludeGenreIds: params.exclude_genre_id,
     };
 
-    const db: Database = c.env.DB;
+    const db = drizzle(c.env.DB);
     const [{ total, totalAmount }, items] = await Promise.all([
       countTransactions(db, filter),
       fetchTransactions(db, filter, params.limit, params.offset),
@@ -162,27 +163,38 @@ const routes = app
    * 件数が高々 200 程度なので、PWA 側は起動時に一括取得して以降は使い回す。
    */
   .get("/api/masters", async (c) => {
-    const db: Database = c.env.DB;
-    const [categories, genres, accounts] = await Promise.all([
-      db.prepare("SELECT id, mode, name, sort FROM categories ORDER BY mode, sort, id").all(),
+    const db = drizzle(c.env.DB);
+    const [categoryRows, genreRows, accountRows] = await Promise.all([
       db
-        .prepare("SELECT id, category_id, name, sort FROM genres ORDER BY category_id, sort, id")
-        .all(),
-      db.prepare("SELECT id, name, sort FROM accounts ORDER BY sort, id").all(),
+        .select({
+          id: categories.id,
+          mode: categories.mode,
+          name: categories.name,
+          sort: categories.sort,
+        })
+        .from(categories)
+        .orderBy(categories.mode, categories.sort, categories.id),
+      db
+        .select({
+          id: genres.id,
+          category_id: genres.categoryId,
+          name: genres.name,
+          sort: genres.sort,
+        })
+        .from(genres)
+        .orderBy(genres.categoryId, genres.sort, genres.id),
+      db
+        .select({ id: accounts.id, name: accounts.name, sort: accounts.sort })
+        .from(accounts)
+        .orderBy(accounts.sort, accounts.id),
     ]);
-    return c.json({
-      categories: categories.results,
-      genres: genres.results,
-      accounts: accounts.results,
-    });
+    return c.json({ categories: categoryRows, genres: genreRows, accounts: accountRows });
   })
   /** ミラーの同期時刻と件数を返す。UI に鮮度を表示するために使う。 */
   .get("/api/meta", async (c) => {
-    const db: Database = c.env.DB;
-    const { results } = await db
-      .prepare("SELECT key, value FROM sync_meta")
-      .all<{ key: string; value: string | null }>();
-    const meta = new Map(results.map((row) => [row.key, row.value]));
+    const db = drizzle(c.env.DB);
+    const rows = await db.select().from(syncMeta);
+    const meta = new Map(rows.map((row) => [row.key, row.value]));
     return c.json({
       synced_at: meta.get("synced_at") ?? null,
       counts: JSON.parse(meta.get("counts") || "{}") as Record<string, number>,

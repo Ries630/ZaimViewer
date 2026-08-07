@@ -4,43 +4,27 @@
  * CLAUDE.md の設計決定「除外は行ごとのフラグではなくクエリのルールで表現する」の
  * 実装箇所。ルールの追加・変更はすべてこのモジュールに閉じる。
  * 将来「よく使う除外条件に名前を付ける」層を載せる場合も、
- * その層は TransactionFilter を組み立てるだけでよく、SQL を書く必要はない。
+ * その層は TransactionFilter を組み立てるだけでよく SQL を書く必要はない。
  */
 
-import type { Database } from "./db";
+import {
+  type SQL,
+  and,
+  count,
+  sum,
+  desc,
+  eq,
+  gte,
+  inArray,
+  lte,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 
-// 明細一覧の SELECT 句。マスタ名と ID の両方を返す
-// （名前は表示用、ID は UI がフィルタを組み立てるために使う）。
-//
-// v_transactions VIEW を使わず自前で JOIN しているのは、VIEW が ID 列を持たないため。
-// VIEW を変更するにはスキーマの変更と再同期が要る一方、API 側の JOIN なら
-// ミラーの構造に触れずに済む。
-const SELECT_COLUMNS = `
-    t.id,
-    t.mode,
-    t.date,
-    t.amount,
-    t.category_id,
-    c.name  AS category,
-    t.genre_id,
-    g.name  AS genre,
-    t.from_account_id,
-    fa.name AS from_account,
-    t.to_account_id,
-    ta.name AS to_account,
-    t.name,
-    t.place,
-    t.comment,
-    t.currency_code
-`;
-
-const FROM_JOIN = `
-FROM transactions t
-LEFT JOIN categories c  ON c.id  = t.category_id
-LEFT JOIN genres g      ON g.id  = t.genre_id
-LEFT JOIN accounts fa   ON fa.id = t.from_account_id
-LEFT JOIN accounts ta   ON ta.id = t.to_account_id
-`;
+import type { MirrorDatabase } from "./db";
+import { accounts, categories, genres, transactions } from "./schema";
 
 /** LIKE 検索でワイルドカードとして解釈させないための退避文字。 */
 const LIKE_ESCAPE = "\\";
@@ -77,46 +61,6 @@ export interface TransactionFilter {
   excludeGenreIds?: number[];
 }
 
-/** 組み立て中の WHERE 句とバインド値。 */
-class WhereBuilder {
-  readonly #clauses: string[] = [];
-  readonly #params: unknown[] = [];
-
-  /**
-   * 条件を 1 つ追加する。
-   *
-   * @param clause SQL の条件式（プレースホルダを含む）。
-   * @param params プレースホルダにバインドする値。
-   */
-  add(clause: string, ...params: unknown[]): void {
-    this.#clauses.push(clause);
-    this.#params.push(...params);
-  }
-
-  /**
-   * IN / NOT IN 条件を追加する。値が空なら何もしない。
-   *
-   * @param column 対象の列式。
-   * @param values 候補値。空なら条件を追加しない。
-   * @param negate true なら NOT IN にする。
-   */
-  addIn(column: string, values: readonly unknown[] | undefined, negate = false): void {
-    if (!values || values.length === 0) return;
-    const placeholders = values.map(() => "?").join(", ");
-    this.add(`${column} ${negate ? "NOT IN" : "IN"} (${placeholders})`, ...values);
-  }
-
-  /** WHERE 句の文字列を返す。条件が無ければ空文字。 */
-  render(): string {
-    return this.#clauses.length > 0 ? ` WHERE ${this.#clauses.join(" AND ")}` : "";
-  }
-
-  /** バインド値を返す。 */
-  get params(): unknown[] {
-    return this.#params;
-  }
-}
-
 /**
  * LIKE のワイルドカード（% _）と退避文字自体をエスケープする。
  *
@@ -131,66 +75,57 @@ function escapeLike(term: string): string {
   return escaped;
 }
 
-/** WHERE 句とバインド値の組。 */
-export interface WhereClause {
-  sql: string;
-  params: unknown[];
-}
-
 /**
- * フィルタを WHERE 句とバインド値に変換する。
+ * フィルタを WHERE 条件のリストに変換する。
+ *
+ * 未指定の項目は undefined を返す。`and()` が undefined を無視するため、
+ * 呼び出し側で絞り込む必要はない。
  *
  * @param filt 絞り込み条件。
- * @returns WHERE 句（条件が無ければ空文字）とバインド値。
+ * @returns 条件式のリスト（未指定の項目は undefined）。
  */
-export function buildWhere(filt: TransactionFilter): WhereClause {
-  const where = new WhereBuilder();
+function conditions(filt: TransactionFilter): (SQL | undefined)[] {
+  const t = transactions;
+  const pattern = filt.q ? `%${escapeLike(filt.q)}%` : undefined;
 
-  if (filt.dateFrom) where.add("t.date >= ?", filt.dateFrom);
-  if (filt.dateTo) where.add("t.date <= ?", filt.dateTo);
+  return [
+    filt.dateFrom ? gte(t.date, filt.dateFrom) : undefined,
+    filt.dateTo ? lte(t.date, filt.dateTo) : undefined,
+    filt.modes?.length ? inArray(t.mode, filt.modes) : undefined,
+    filt.categoryIds?.length ? inArray(t.categoryId, filt.categoryIds) : undefined,
+    filt.genreIds?.length ? inArray(t.genreId, filt.genreIds) : undefined,
 
-  where.addIn("t.mode", filt.modes);
-  where.addIn("t.category_id", filt.categoryIds);
-  where.addIn("t.genre_id", filt.genreIds);
+    // 口座は payment なら from、income なら to に入る。
+    // 利用者から見れば「その口座の明細」なので、どちらか一致で該当とする。
+    filt.accountIds?.length
+      ? or(inArray(t.fromAccountId, filt.accountIds), inArray(t.toAccountId, filt.accountIds))
+      : undefined,
 
-  // 口座は payment なら from、income なら to に入る。
-  // 利用者から見れば「その口座の明細」なので、どちらか一致で該当とする。
-  if (filt.accountIds && filt.accountIds.length > 0) {
-    const placeholders = filt.accountIds.map(() => "?").join(", ");
-    where.add(
-      `(t.from_account_id IN (${placeholders}) OR t.to_account_id IN (${placeholders}))`,
-      ...filt.accountIds,
-      ...filt.accountIds,
-    );
-  }
+    filt.amountMin !== undefined ? gte(t.amount, filt.amountMin) : undefined,
+    filt.amountMax !== undefined ? lte(t.amount, filt.amountMax) : undefined,
 
-  if (filt.amountMin !== undefined) where.add("t.amount >= ?", filt.amountMin);
-  if (filt.amountMax !== undefined) where.add("t.amount <= ?", filt.amountMax);
+    // LIKE ... ESCAPE は Drizzle のヘルパに無いので sql で書く。
+    // 退避文字を渡さないと、利用者が入力した % や _ がワイルドカードとして効いてしまう。
+    pattern
+      ? or(
+          sql`COALESCE(${t.name}, '') LIKE ${pattern} ESCAPE ${LIKE_ESCAPE}`,
+          sql`COALESCE(${t.place}, '') LIKE ${pattern} ESCAPE ${LIKE_ESCAPE}`,
+          sql`COALESCE(${t.comment}, '') LIKE ${pattern} ESCAPE ${LIKE_ESCAPE}`,
+        )
+      : undefined,
 
-  if (filt.q) {
-    const pattern = `%${escapeLike(filt.q)}%`;
-    where.add(
-      "(COALESCE(t.name, '') LIKE ? ESCAPE ?" +
-        " OR COALESCE(t.place, '') LIKE ? ESCAPE ?" +
-        " OR COALESCE(t.comment, '') LIKE ? ESCAPE ?)",
-      pattern,
-      LIKE_ESCAPE,
-      pattern,
-      LIKE_ESCAPE,
-      pattern,
-      LIKE_ESCAPE,
-    );
-  }
-
-  // place が NULL の行を NOT IN が取りこぼさないよう COALESCE を挟む
-  // （NULL NOT IN (...) は NULL になり、行が消えてしまう）。
-  where.addIn("COALESCE(t.place, '')", filt.excludePlaces, true);
-  where.addIn("COALESCE(t.genre_id, -1)", filt.excludeGenreIds, true);
-
-  return { sql: where.render(), params: where.params };
+    // place が NULL の行を NOT IN が取りこぼさないよう COALESCE を挟む
+    // （NULL NOT IN (...) は NULL になり、行が消えてしまう）。
+    filt.excludePlaces?.length
+      ? notInArray(sql`COALESCE(${t.place}, '')`, filt.excludePlaces)
+      : undefined,
+    filt.excludeGenreIds?.length
+      ? notInArray(sql`COALESCE(${t.genreId}, -1)`, filt.excludeGenreIds)
+      : undefined,
+  ];
 }
 
-/** 明細 1 件。マスタ名と ID の両方を持つ。 */
+/** 明細 1 件。マスタ名と ID の両方を持つ（名前は表示用、ID は UI がフィルタを組むため）。 */
 export interface Transaction {
   id: number;
   mode: string;
@@ -220,22 +155,46 @@ export interface Transaction {
  * @returns 明細のリスト。
  */
 export async function fetchTransactions(
-  db: Database,
+  db: MirrorDatabase,
   filt: TransactionFilter,
   limit: number,
   offset: number,
 ): Promise<Transaction[]> {
-  const { sql: whereSql, params } = buildWhere(filt);
-  // 同日内の順序を安定させるため id を第 2 キーにする
-  // （不安定だとページ送りで明細が重複・欠落する）。
-  const sql =
-    `SELECT ${SELECT_COLUMNS} ${FROM_JOIN} ${whereSql}` +
-    " ORDER BY t.date DESC, t.id DESC LIMIT ? OFFSET ?";
-  const { results } = await db
-    .prepare(sql)
-    .bind(...params, limit, offset)
-    .all<Transaction>();
-  return results;
+  const t = transactions;
+  // 出金元と入金先で accounts を 2 回引くため別名を付ける
+  const fromAccount = alias(accounts, "fa");
+  const toAccount = alias(accounts, "ta");
+
+  return await db
+    .select({
+      id: t.id,
+      mode: t.mode,
+      date: t.date,
+      amount: t.amount,
+      category_id: t.categoryId,
+      category: categories.name,
+      genre_id: t.genreId,
+      genre: genres.name,
+      from_account_id: t.fromAccountId,
+      from_account: fromAccount.name,
+      to_account_id: t.toAccountId,
+      to_account: toAccount.name,
+      name: t.name,
+      place: t.place,
+      comment: t.comment,
+      currency_code: t.currencyCode,
+    })
+    .from(t)
+    .leftJoin(categories, eq(categories.id, t.categoryId))
+    .leftJoin(genres, eq(genres.id, t.genreId))
+    .leftJoin(fromAccount, eq(fromAccount.id, t.fromAccountId))
+    .leftJoin(toAccount, eq(toAccount.id, t.toAccountId))
+    .where(and(...conditions(filt)))
+    // 同日内の順序を安定させるため id を第 2 キーにする
+    // （不安定だとページ送りで明細が重複・欠落する）。
+    .orderBy(desc(t.date), desc(t.id))
+    .limit(limit)
+    .offset(offset);
 }
 
 /** 件数と金額合計。 */
@@ -255,14 +214,16 @@ export interface TransactionTotals {
  * @returns 件数と金額合計。一致 0 件なら両方 0。
  */
 export async function countTransactions(
-  db: Database,
+  db: MirrorDatabase,
   filt: TransactionFilter,
 ): Promise<TransactionTotals> {
-  const { sql: whereSql, params } = buildWhere(filt);
-  const sql = `SELECT COUNT(*) AS total, COALESCE(SUM(t.amount), 0) AS total_amount ${FROM_JOIN} ${whereSql}`;
-  const row = await db
-    .prepare(sql)
-    .bind(...params)
-    .first<{ total: number; total_amount: number }>();
-  return { total: row?.total ?? 0, totalAmount: row?.total_amount ?? 0 };
+  const [row] = await db
+    .select({
+      total: count(),
+      totalAmount: sum(transactions.amount),
+    })
+    .from(transactions)
+    .where(and(...conditions(filt)));
+
+  return { total: row?.total ?? 0, totalAmount: Number(row?.totalAmount ?? 0) };
 }

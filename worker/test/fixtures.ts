@@ -1,13 +1,17 @@
 /**
  * テスト用ミラー DB の構築。
  *
- * 本番のマスタ構成を小さく模した固定データを投入する。
- * 実データの特徴（未来日付の家賃、コンビニの少額決済、振替、NULL の place、
+ * テーブルは本番と同じ `sync.ts` の DDL と差し替え処理で作る。
+ * スキーマをテスト側に書き写すと、本番の DDL を変えたときに
+ * テストだけ古いまま通り続けてしまうため。
+ *
+ * 固定データは本番のマスタ構成を小さく模したもので、実データの特徴
+ * （未来日付の家賃、コンビニの少額決済、振替、NULL の place、
  * LIKE のワイルドカードを含む店舗名）を意図的に含めてある。
- * フィルタが実運用で効くかをここで検証するため。
  */
 
-import type { Database } from "../src/db";
+import type { Database, PreparedStatement } from "../src/db";
+import { swapSql, workTableDdl } from "../src/sync";
 
 /** (id, mode, name, sort) */
 const CATEGORIES: [number, string, string, number][] = [
@@ -61,68 +65,46 @@ const TRANSACTIONS: [
 /** 固定の同期時刻。API が値をそのまま返すことの確認に使う。 */
 export const SYNCED_AT = "2026-08-06T09:41:22.566560+00:00";
 
-const SCHEMA = [
-  `CREATE TABLE transactions (
-    id INTEGER PRIMARY KEY, mode TEXT NOT NULL, date TEXT NOT NULL, amount INTEGER NOT NULL,
-    category_id INTEGER, genre_id INTEGER, from_account_id INTEGER, to_account_id INTEGER,
-    name TEXT, place TEXT, comment TEXT, currency_code TEXT, receipt_id INTEGER,
-    active INTEGER, created TEXT, raw TEXT NOT NULL
-  )`,
-  `CREATE TABLE categories (
-    id INTEGER PRIMARY KEY, mode TEXT, name TEXT, sort INTEGER, active INTEGER, raw TEXT NOT NULL
-  )`,
-  `CREATE TABLE genres (
-    id INTEGER PRIMARY KEY, category_id INTEGER, name TEXT, sort INTEGER, active INTEGER, raw TEXT NOT NULL
-  )`,
-  `CREATE TABLE accounts (
-    id INTEGER PRIMARY KEY, name TEXT, sort INTEGER, active INTEGER, raw TEXT NOT NULL
-  )`,
-  "CREATE TABLE sync_meta (key TEXT PRIMARY KEY, value TEXT)",
-];
+/** 固定データの明細件数。 */
+export const TRANSACTION_COUNT = TRANSACTIONS.length;
 
 /**
  * テスト用のテーブルを作り、固定データを投入する。
  *
+ * 本番と同じ手順（作業用テーブルに構築 → 差し替え）を踏むので、
+ * DDL と差し替えバッチもテストのたびに実行される。
+ *
  * @param db 対象のミラー DB。
  */
 export async function seedDatabase(db: Database): Promise<void> {
-  await db.batch(
-    [
-      "DROP TABLE IF EXISTS transactions",
-      "DROP TABLE IF EXISTS categories",
-      "DROP TABLE IF EXISTS genres",
-      "DROP TABLE IF EXISTS accounts",
-      "DROP TABLE IF EXISTS sync_meta",
-      ...SCHEMA,
-    ].map((sql) => db.prepare(sql)),
-  );
+  await db.batch(workTableDdl().map((statement) => db.prepare(statement)));
 
-  const txStmt = db.prepare(
-    `INSERT INTO transactions
+  const transactionStatement = db.prepare(
+    `INSERT INTO transactions_new
      (id, mode, date, amount, category_id, genre_id, from_account_id, to_account_id,
       name, place, comment, raw)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}')`,
   );
-  const catStmt = db.prepare(
-    "INSERT INTO categories (id, mode, name, sort, raw) VALUES (?, ?, ?, ?, '{}')",
+  const categoryStatement = db.prepare(
+    "INSERT INTO categories_new (id, mode, name, sort, raw) VALUES (?, ?, ?, ?, '{}')",
   );
-  const genreStmt = db.prepare(
-    "INSERT INTO genres (id, category_id, name, sort, raw) VALUES (?, ?, ?, ?, '{}')",
+  const genreStatement = db.prepare(
+    "INSERT INTO genres_new (id, category_id, name, sort, raw) VALUES (?, ?, ?, ?, '{}')",
   );
-  const accountStmt = db.prepare(
-    "INSERT INTO accounts (id, name, sort, raw) VALUES (?, ?, ?, '{}')",
+  const accountStatement = db.prepare(
+    "INSERT INTO accounts_new (id, name, sort, raw) VALUES (?, ?, ?, '{}')",
   );
-  const metaStmt = db.prepare("INSERT INTO sync_meta (key, value) VALUES (?, ?)");
+  const metaStatement = db.prepare("INSERT INTO sync_meta_new (key, value) VALUES (?, ?)");
 
-  await db.batch([
-    ...TRANSACTIONS.map((row) => txStmt.bind(...row)),
-    ...CATEGORIES.map((row) => catStmt.bind(...row)),
-    ...GENRES.map((row) => genreStmt.bind(...row)),
-    ...ACCOUNTS.map((row) => accountStmt.bind(...row)),
-    metaStmt.bind("synced_at", SYNCED_AT),
-    metaStmt.bind("counts", JSON.stringify({ transactions: TRANSACTIONS.length })),
-  ]);
+  const rows: PreparedStatement[] = [
+    ...TRANSACTIONS.map((row) => transactionStatement.bind(...row)),
+    ...CATEGORIES.map((row) => categoryStatement.bind(...row)),
+    ...GENRES.map((row) => genreStatement.bind(...row)),
+    ...ACCOUNTS.map((row) => accountStatement.bind(...row)),
+    metaStatement.bind("synced_at", SYNCED_AT),
+    metaStatement.bind("counts", JSON.stringify({ transactions: TRANSACTION_COUNT })),
+  ];
+  await db.batch(rows);
+
+  await db.batch(swapSql().map((statement) => db.prepare(statement)));
 }
-
-/** 固定データの明細件数。 */
-export const TRANSACTION_COUNT = TRANSACTIONS.length;
