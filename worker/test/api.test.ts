@@ -3,7 +3,6 @@
 import { SELF, env } from "cloudflare:test";
 import { beforeAll, expect, it } from "vitest";
 
-import type { Database } from "../src/db";
 import { SYNCED_AT, TRANSACTION_COUNT, seedDatabase } from "./fixtures";
 
 /** テスト用の絶対 URL を組み立てる。 */
@@ -12,7 +11,7 @@ function url(path: string): string {
 }
 
 beforeAll(async () => {
-  await seedDatabase(env.DB as unknown as Database);
+  await seedDatabase(env.DB);
 });
 
 it("明細一覧はページ情報付きで返る", async () => {

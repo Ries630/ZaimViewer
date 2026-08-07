@@ -7,7 +7,7 @@ import type { Database } from "../src/db";
 import { countTransactions, fetchTransactions, type TransactionFilter } from "../src/queries";
 import { seedDatabase } from "./fixtures";
 
-const db = env.DB as unknown as Database;
+const db: Database = env.DB;
 
 /**
  * フィルタに一致した明細の ID を順序どおりに返す。

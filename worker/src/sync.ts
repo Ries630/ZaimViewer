@@ -9,7 +9,7 @@
  */
 
 import type { Database, PreparedStatement } from "./db";
-import { ZaimClient, type ZaimMaster, type ZaimMoney } from "./zaim";
+import { ZaimClient, type ZaimMaster } from "./zaim";
 
 /** 1 回の batch() に載せるステートメント数。D1 の 1 バッチ上限に対する安全側の値。 */
 const BATCH_SIZE = 100;
@@ -168,7 +168,10 @@ function insertStatements(
   columns: readonly string[],
   rows: readonly Record<string, unknown>[],
 ): PreparedStatement[] {
-  const placeholders = columns.map(() => "?").concat("?").join(", ");
+  const placeholders = columns
+    .map(() => "?")
+    .concat("?")
+    .join(", ");
   const stmt = db.prepare(
     `INSERT INTO ${table} (${columns.join(", ")}, raw) VALUES (${placeholders})`,
   );
@@ -210,12 +213,7 @@ export async function syncAll(db: Database, client: ZaimClient): Promise<SyncRes
     if (done) break;
 
     const t = Date.now();
-    const statements = insertStatements(
-      db,
-      "transactions_new",
-      TRANSACTION_COLUMNS,
-      value as ZaimMoney[],
-    );
+    const statements = insertStatements(db, "transactions_new", TRANSACTION_COLUMNS, value);
     transformMs += Date.now() - t;
 
     const w = Date.now();

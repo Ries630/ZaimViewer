@@ -55,7 +55,7 @@ export function percentEncode(value: string): string {
 function normalizeParameters(params: [string, string][]): string {
   return params
     .map(([k, v]): [string, string] => [percentEncode(k), percentEncode(v)])
-    .sort(([ka, va], [kb, vb]) => (ka < kb ? -1 : ka > kb ? 1 : va < vb ? -1 : va > vb ? 1 : 0))
+    .toSorted(([ka, va], [kb, vb]) => (ka < kb ? -1 : ka > kb ? 1 : va < vb ? -1 : va > vb ? 1 : 0))
     .map(([k, v]) => `${k}=${v}`)
     .join("&");
 }
@@ -138,7 +138,7 @@ export async function signRequest(
 
   // 署名対象はクエリ・ボディ・oauth_* の全て
   const params: [string, string][] = [
-    ...[...parsed.searchParams.entries()],
+    ...parsed.searchParams.entries(),
     ...Object.entries(bodyParams),
     ...Object.entries(oauthParams),
   ];

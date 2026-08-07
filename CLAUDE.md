@@ -105,10 +105,16 @@ SQLite で組んでいたが、(1) 学習対象が TS / Hono / Cloudflare であ
 cd worker
 bun install
 bun run dev         # ローカル D1 で :8787 に起動
+bun run check       # format:check → lint → typecheck → test を一括
 bun run test        # workerd 上で実行（D1 も実物を使う）
-bun run typecheck
+bun run lint        # oxlint（型認識ルール込み）
+bun run format      # oxfmt
 bun run cf-typegen  # wrangler.jsonc 変更後に型を再生成
 ```
+
+ツールチェーンは TypeScript 7（Go 実装）+ oxlint + oxfmt。
+lint は `--type-aware` で動かしており、型情報を要するルール（`no-floating-promises`
+など）も効く。これは `oxlint-tsgolint` が入っていることが前提。
 
 同期はローカルでは `curl -X POST http://127.0.0.1:8787/api/sync`（約 17 秒、44 リクエスト）。
 

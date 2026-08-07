@@ -8,7 +8,7 @@
     {
       "binding": "DB",
       "database_name": "zaimviewer",
-      "database_id": "local-spike-placeholder"
-    }
-  ]
+      "database_id": "local-spike-placeholder",
+    },
+  ],
 }

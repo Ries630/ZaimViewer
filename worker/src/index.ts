@@ -108,7 +108,7 @@ app.get("/api/transactions", zValidator("query", transactionQuery), async (c) =>
     excludeGenreIds: params.exclude_genre_id,
   };
 
-  const db = c.env.DB as Database;
+  const db: Database = c.env.DB;
   const [{ total, totalAmount }, items] = await Promise.all([
     countTransactions(db, filter),
     fetchTransactions(db, filter, params.limit, params.offset),
@@ -129,7 +129,7 @@ app.get("/api/transactions", zValidator("query", transactionQuery), async (c) =>
  * 件数が高々 200 程度なので、PWA 側は起動時に一括取得して以降は使い回す。
  */
 app.get("/api/masters", async (c) => {
-  const db = c.env.DB as Database;
+  const db: Database = c.env.DB;
   const [categories, genres, accounts] = await Promise.all([
     db.prepare("SELECT id, mode, name, sort FROM categories ORDER BY mode, sort, id").all(),
     db
@@ -146,7 +146,7 @@ app.get("/api/masters", async (c) => {
 
 /** ミラーの同期時刻と件数を返す。UI に鮮度を表示するために使う。 */
 app.get("/api/meta", async (c) => {
-  const db = c.env.DB as Database;
+  const db: Database = c.env.DB;
   const { results } = await db
     .prepare("SELECT key, value FROM sync_meta")
     .all<{ key: string; value: string | null }>();
@@ -164,7 +164,7 @@ app.get("/api/meta", async (c) => {
  */
 app.post("/api/sync", async (c) => {
   const client = new ZaimClient(credentialsOf(c.env));
-  const result = await syncAll(c.env.DB as Database, client);
+  const result = await syncAll(c.env.DB, client);
   return c.json(result);
 });
 
@@ -179,7 +179,7 @@ export default {
    */
   async scheduled(_event: ScheduledController, env: Env): Promise<void> {
     const client = new ZaimClient(credentialsOf(env));
-    const result = await syncAll(env.DB as Database, client);
+    const result = await syncAll(env.DB, client);
     console.log(`同期完了: ${JSON.stringify(result.counts)} (${result.timings.totalMs}ms)`);
   },
 } satisfies ExportedHandler<Env>;
