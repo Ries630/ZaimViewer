@@ -1,7 +1,6 @@
 /**
  * Zaim REST API v2 のクライアント（OAuth1.0a 認証）。
  *
- * Python 版 `src/zaimviewer/zaim_client.py` の移植。
  * fetch と Web Crypto のみで動くため Workers 上でそのまま走る。
  */
 
