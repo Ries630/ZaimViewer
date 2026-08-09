@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# 同じブランチで新しい push があれば古い実行は打ち切る
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: 依存関係のインストール
+        run: bun install --frozen-lockfile
+
+      - name: Worker の型定義を生成
+        # worker-configuration.d.ts は生成物で追跡していないため、
+        # 型検査の前に作る必要がある
+        run: bun run cf-typegen
+
+      - name: 整形・lint・型検査・テスト
+        # Zaim の認証情報は要らない。テストはミラー DB の読み取りだけで、
+        # 外部 API を叩くコードは通らない
+        run: bun run check
