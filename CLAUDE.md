@@ -59,75 +59,52 @@ transfer 489、2014-02〜2029-12。未来分は繰り返し登録の家賃）を
 | パッケージ管理 | bun | peer dependency の解決が緩いので、更新時は要注意 |
 | PWA（予定） | React + Vite + `@cloudflare/vite-plugin` | Worker と単一の dev サーバで動き、同一オリジンで API を叩ける |
 
-**不採用にしたもの。**
+**不採用にしたもの。** 理由と再評価のサインは各 ADR にある。
 
-- **Vite+** — Vitest / Rolldown / Oxlint / Oxfmt を束ねた統合層（2026-07 に beta、MIT）。
-  中身の oxlint と oxfmt は個別に採用済み。統合層を入れないのは、テストが
-  `@cloudflare/vitest-pool-workers` という独自 pool に依存していて、`vp test` が
-  これを通すか未知なため。1.0 になり PWA を作る段になったら `vp migrate` を試す価値はある
-- **Turso（libSQL）** — 無料枠は D1 より大きく（5GB / 5 億行月）、D1 固有の制限
-  （LIKE パターン 50 バイト、invocation あたりクエリ数）も無い。それでも D1 を採るのは、
-  実測でどの制限にも余裕があり（DB 3.3MB）、ネイティブバインディングの単純さが勝つため。
-  乗り換えるサインは「LIKE の 48 バイトが実際に邪魔になる」「同期を Worker 内で完結させたくなる」。
-  Drizzle を通しているので `drizzle-orm/d1` → `drizzle-orm/libsql` の差し替えで済む
-- **汎用ツール（Directus / NocoDB / Metabase）** — 編集プロキシとしてバックエンドが
-  必須になった時点で、主価値だった「API 自動生成」が仕事を失った
+- **Turso（libSQL）** — 制限だけ見れば D1 より上だが、実測でどれにも余裕がある
+  → [ADR-0010](docs/adr/0010-d1-as-mirror.md)
+- **Vite+** — 中身の oxlint / oxfmt は個別に採用済み
+  → [ADR-0013](docs/adr/0013-voidzero-toolchain.md)
+- **汎用ツール（Directus / NocoDB / Metabase）** — 編集プロキシが必須になり主価値が消えた
+  → [ADR-0001](docs/adr/0001-build-viewer-instead-of-generic-tools.md)
 
 ## デプロイの前提（未実施）
 
 **同期は手元（Mac mini）から実行し、読み取りだけ Workers に置く。** Workers の
-CPU 時間上限は無料プランだと Cron Trigger でも 10ms で、全件同期の実測（約 20ms、
-ローカル実行値）が収まらない。さらに D1 には「invocation あたりのクエリ数」制限が
-あり（無料 50 / 有料 1,000）、約 4,600 文を投げる同期は**有料プランでも 1 回では収まらない**。
+CPU 時間（10ms に対し実測 20ms）と D1 の invocation あたりクエリ数（有料 1,000 に対し
+約 4,600 文）の両方に収まらないため。有料プランでも解決しない
+→ [ADR-0015](docs/adr/0015-sync-outside-worker.md)
 
-読み取り API は 1 リクエストあたり 2〜3 クエリなので無料枠で足りる。
-同期だけを外に出せば月額 0 円で、Mac mini がスリープ中でも iPhone から閲覧できる
-（ミラーが古くなるだけ）。
-
-**アトミック差し替えはこの構成でも維持できる。** `*_new` への一括投入は多数の
-リクエストに分かれてよく（誰も読んでいないテーブルなので）、原子性が要るのは
-差し替えの 13 文だけ。これは 1 バッチに収まる。
+読み取り API は 1 リクエストあたり 2〜3 クエリなので無料枠で足りる。月額 0 円で、
+Mac mini がスリープ中でも閲覧できる（ミラーが古くなるだけ）。
+アトミック差し替えもこの構成で維持できる（原子性が要るのは差し替えの 13 文だけ）。
 
 **未検証: Cloudflare Access の挙動。** ホーム画面から起動した PWA でセッションが
-切れたときの再認証は、実際にデプロイしないと分からない。セッション期間は最長 1 か月。
+切れたときの再認証は、実際にデプロイしないと分からない。セッション期間は最長 1 か月
+→ [ADR-0016](docs/adr/0016-cloudflare-access.md)（提案のまま）
 
-## 設計上の決定と理由
+## 設計上の決定
 
-**ローカル独自データを一切持たない。** 重要フラグやメモのようなカラムは作らない。
-除外したい明細（振替・自動連携ノイズ）は行ごとのフラグではなくクエリのルールで表現する。
-ルールは今後増える明細にも自動で効くが、フラグは新しい明細のたび付け続ける必要があり、
-「入力時に選別する」旧運用に逆戻りしてしまうため。
+理由・却下した代替・再評価のサインは [`docs/adr/`](docs/adr/README.md) にある。
+ここには結論だけを置く。**判断を覆す提案をする前に、対応する ADR を読むこと。**
 
-結果としてこの DB は**使い捨てのミラー**になる。壊れたら再同期すればよく、
-バックアップも移行も不要。Zaim が唯一の正。
+| 決定 | ADR |
+|---|---|
+| 汎用ツールを使わず閲覧層を自作する | [0001](docs/adr/0001-build-viewer-instead-of-generic-tools.md) |
+| ローカル独自データを持たない。除外はクエリのルールで表現する。DB は使い捨てのミラーで Zaim が唯一の正 | [0002](docs/adr/0002-no-local-only-data.md) |
+| 編集は必ず Zaim 更新 API を経由する。署名鍵はブラウザに置けないので Worker に編集プロキシを立てる | [0003](docs/adr/0003-edit-through-zaim-api.md) |
+| Zaim API は OAuth1.0a で直叩き。署名は Web Crypto だけで自前実装（`worker/src/oauth1.ts`） | [0006](docs/adr/0006-oauth1-in-house.md) |
+| API にフィルタの既定値を持たせない。指定なし = 制限なし | [0008](docs/adr/0008-no-default-filters-in-api.md) |
+| 実行基盤は TypeScript / Hono / Cloudflare Workers | [0009](docs/adr/0009-migrate-to-workers.md) |
+| ミラー DB は D1 | [0010](docs/adr/0010-d1-as-mirror.md) |
+| DB アクセスの型は `worker/src/db.ts` に集め、ドライバを名指ししない | [0011](docs/adr/0011-driver-agnostic-db-types.md) |
+| 同期は `*_new` に全件構築し `batch()` で差し替える。認証確認と 0 件チェックは差し替えより前 | [0012](docs/adr/0012-table-swap-sync.md) |
+| ツールチェーンは TypeScript 7 + oxlint + oxfmt | [0013](docs/adr/0013-voidzero-toolchain.md) |
+| 読み取りは Drizzle、同期は素の SQL | [0014](docs/adr/0014-drizzle-for-reads.md) |
+| 同期は Worker の外で実行する | [0015](docs/adr/0015-sync-outside-worker.md) |
+| 設計判断は ADR として残す | [0017](docs/adr/0017-adr-in-repo.md) |
 
-**編集は必ず Zaim 更新 API を経由する。** ミラーを直接書き換えても Zaim に届かず、
-次の同期で黙って消える。OAuth1.0a の署名鍵はブラウザに置けないため、
-Worker 側に編集プロキシを立て、PWA はそこを叩く。
-
-**TypeScript + Hono + Workers を選んだ理由。** 当初は Python + FastAPI + ローカル
-SQLite で組んでいたが、(1) 学習対象が TS / Hono / Cloudflare であること、
-(2) Mac mini がスリープしていると iPhone から見られない問題が消えること、
-(3) 定期実行が Cron Trigger で済み launchd を書かずに済むこと、の 3 点で乗り換えた。
-移植時、フィルタの結果が Python 実装と 19 ケースすべてで一致することを確認している。
-
-**OAuth1.0a の署名は自前実装。** `oauth-1.0a` は同期 API 前提で、非同期の
-`crypto.subtle` と噛み合わない。Web Crypto だけで書けば依存が増えず、
-`nodejs_compat` フラグも要らない（`worker/src/oauth1.ts`）。
-署名は `oauthlib` と一致することを確認済み（記号 `!*'()`・日本語・POST ボディを含む）。
-
-**同期はテーブル差し替え方式。** D1 にはファイル差し替えに相当する操作がないため、
-`*_new` テーブルに全件構築し、`DROP` → `RENAME` → インデックス再作成を単一の
-`batch()` で実行する。`batch()` は 1 トランザクションなので、途中で失敗すれば
-旧テーブルがそのまま残る（故意に失敗させて検証済み）。認証確認と 0 件チェックを
-差し替えより前に置き、API 異常時に空のミラーで上書きしないようにしている。
-
-**DB アクセスの型は `worker/src/db.ts` に集める。** 読み取り用（`MirrorDatabase`、
-Drizzle のドライバ非依存な型）と書き込み用（`Database`、素の SQL を投げる形）の
-2 つを置き、どちらもドライバを名指ししない。同期を手元から D1 の HTTP API 越しに
-実行する構成（上記）や、Turso への乗り換えを、この 1 ファイルの差し替えで
-吸収するため。`D1Database` は `Database` を構造的に満たすので、Workers 上では
-実装を挟まずそのまま渡している。
+以下はコードとテストが守っているもので、ADR にはしていない。
 
 **ルート定義は 1 本のチェーンで書く。** `app.get(...)` を文として並べると
 RPC の型が `typeof app` に積み上がらず、PWA の `hc<AppType>` からエンドポイントが
@@ -139,17 +116,6 @@ RPC の型が `typeof app` に積み上がらず、PWA の `hc<AppType>` から�
 **キーワード検索は UTF-8 で 48 バイトまで。** D1 は LIKE / GLOB のパターン長を
 50 バイトに制限している（標準の SQLite ビルドは 50,000 なのでローカルでは踏めない）。
 前後に `%` が付くぶんを引いて 48 バイト。日本語だけなら 16 文字が上限になる。
-
-**API にフィルタの既定値を持たせない。** 「振替を除外」「今日以前だけ」といった
-既定は PWA 側が持ち、API は指定なし = 制限なしに徹する。API 側に暗黙の既定を
-埋めると「全件見たい」ときの外し方が分からなくなり、別の読み手から
-叩いたときに驚くため。
-
-**読み取りは Drizzle、同期は素の SQL。** 読み取り側は列名の打ち間違いを
-型で拾いたいので Drizzle を通す（以前は `.all<Transaction>()` という無検証の
-キャストだった）。同期側は `*_new` テーブルを作って差し替える都合でテーブル名が
-動的になり、DDL と一括 INSERT では ORM の利点も出ないため素のままにしてある。
-`LIKE ... ESCAPE` と `COALESCE(...)` は Drizzle のヘルパに無いので `sql` で書く。
 
 **スキーマ定義は 2 か所にあり、テストで守る。** テーブルの実体は `sync.ts` の
 DDL が作り、読み取りの型付けは `schema.ts` が担う。片方だけ変更すると
