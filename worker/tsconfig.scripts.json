@@ -1,0 +1,11 @@
+// scripts/ は Worker ではなく手元の Bun で走る。
+// Workers の型（worker-configuration.d.ts）と Bun の型は fetch などの宣言が
+// 衝突するため、同じプログラムに混ぜず tsconfig を分けている。
+// scripts が import する src/ のファイルもここで一緒に検査される。
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["bun"]
+  },
+  "include": ["scripts/**/*.ts"]
+}

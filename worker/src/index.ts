@@ -1,8 +1,11 @@
 /**
  * ZaimViewer の Worker エントリポイント。
  *
- * ミラー DB を読む API と、Cron Trigger から呼ばれる同期を 1 つの Worker に載せる。
- * PWA の静的ファイルも同じ Worker から配信する予定で、iPhone からの入口は 1 つになる。
+ * ミラー DB を読む API を提供する。PWA の静的ファイルも同じ Worker から
+ * 配信する予定で、iPhone からの入口は 1 つになる。
+ *
+ * 同期はここには無い。CPU 時間と D1 の invocation あたりクエリ数の両方に
+ * 収まらないため、手元から `scripts/sync.ts` を実行する（ADR-0015）。
  */
 
 import { zValidator } from "@hono/zod-validator";
@@ -19,6 +22,8 @@ import { ZaimClient } from "./zaim";
 /** Worker の環境バインディング。 */
 interface Env {
   DB: D1Database;
+  /** 実行環境。`wrangler.jsonc` で "production"、`.dev.vars` が上書きして "development"。 */
+  ENVIRONMENT: string;
   ZAIM_CONSUMER_KEY: string;
   ZAIM_CONSUMER_SECRET: string;
   ZAIM_ACCESS_TOKEN: string;
@@ -201,11 +206,17 @@ const routes = app
     });
   })
   /**
-   * 手動同期。Cron を待たずに更新したいときに使う。
+   * ローカル開発用の手動同期。ローカル D1 にデータを入れる唯一の手段。
+   *
+   * 本番では動かない（CPU 時間と D1 のクエリ数の上限を超える）ので閉じてある。
+   * 本番の同期は手元から `scripts/sync.ts` を実行する。
    *
    * 破壊的操作なので GET では受けない。
    */
   .post("/api/sync", async (c) => {
+    if (c.env.ENVIRONMENT === "production") {
+      return c.json({ error: "本番の同期は scripts/sync.ts から実行する" }, 404);
+    }
     const client = new ZaimClient(credentialsOf(c.env));
     const result = await syncAll(c.env.DB, client);
     return c.json(result);
@@ -221,16 +232,4 @@ export type AppType = typeof routes;
 
 export default {
   fetch: app.fetch,
-
-  /**
-   * Cron Trigger から呼ばれる定期同期。
-   *
-   * @param _event スケジュール情報（未使用）。
-   * @param env Worker の環境バインディング。
-   */
-  async scheduled(_event: ScheduledController, env: Env): Promise<void> {
-    const client = new ZaimClient(credentialsOf(env));
-    const result = await syncAll(env.DB, client);
-    console.log(`同期完了: ${JSON.stringify(result.counts)} (${result.timings.totalMs}ms)`);
-  },
 } satisfies ExportedHandler<Env>;

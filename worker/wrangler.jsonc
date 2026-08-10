@@ -4,6 +4,9 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-01-01",
   "observability": { "enabled": true },
+  // ローカル開発では .dev.vars の ENVIRONMENT=development が上書きする。
+  // POST /api/sync を本番で閉じるために使う（同期は scripts/sync.ts が正）
+  "vars": { "ENVIRONMENT": "production" },
   "d1_databases": [
     {
       "binding": "DB",
