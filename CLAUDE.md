@@ -22,7 +22,7 @@ Zaim API ──同期(手元の Mac mini で実行)──▶ D1
 iPhone からの入口はひとつで、CORS も不要。同期だけが Worker の外なのは
 CPU 時間とクエリ数の上限のため（「デプロイの前提」参照）。
 
-## 現在地（2026-08-07）
+## 現在地（2026-08-11）
 
 **工程 ① 同期基盤: 完了。** Zaim 全件 4,362 件（payment 3,266 / income 607 /
 transfer 489、2014-02〜2029-12。未来分は繰り返し登録の家賃）をミラー済み。
@@ -35,6 +35,9 @@ transfer 489、2014-02〜2029-12。未来分は繰り返し登録の家賃）を
 
 なお `POST /api/sync` は**ローカル開発でしか使えない**。CPU 時間とクエリ数の
 上限（下記）に引っかかるため、本番の同期は手元から実行する別経路になる。
+
+**初回デプロイ: 完了。** https://zaimviewer.ries.workers.dev で読み取り API 3 本が
+応答する。D1 は `zaim-viewer`（APAC）。ミラーはまだ空なので、次は同期スクリプト。
 
 **工程 ② PWA: 次はここから。** React + Vite + TypeScript + Tailwind CSS v4。
 明細一覧（無限スクロール）とフィルタパネル。モバイルファースト。
@@ -68,7 +71,7 @@ transfer 489、2014-02〜2029-12。未来分は繰り返し登録の家賃）を
 - **汎用ツール（Directus / NocoDB / Metabase）** — 編集プロキシが必須になり主価値が消えた
   → [ADR-0001](docs/adr/0001-build-viewer-instead-of-generic-tools.md)
 
-## デプロイの前提（未実施）
+## デプロイの前提
 
 **同期は手元（Mac mini）から実行し、読み取りだけ Workers に置く。** Workers の
 CPU 時間（10ms に対し実測 20ms）と D1 の invocation あたりクエリ数（有料 1,000 に対し
@@ -82,6 +85,9 @@ Mac mini がスリープ中でも閲覧できる（ミラーが古くなるだ�
 **未検証: Cloudflare Access の挙動。** ホーム画面から起動した PWA でセッションが
 切れたときの再認証は、実際にデプロイしないと分からない。セッション期間は最長 1 か月
 → [ADR-0016](docs/adr/0016-cloudflare-access.md)（提案のまま）
+
+**現状は workers.dev が無認証で公開されている。** ミラーが空のうちは出る情報が
+無いので許容しているだけで、同期スクリプトを回す前に Access を入れること。
 
 ## 設計上の決定
 
@@ -116,6 +122,7 @@ RPC の型が `typeof app` に積み上がらず、PWA の `hc<AppType>` から�
 **キーワード検索は UTF-8 で 48 バイトまで。** D1 は LIKE / GLOB のパターン長を
 50 バイトに制限している（標準の SQLite ビルドは 50,000 なのでローカルでは踏めない）。
 前後に `%` が付くぶんを引いて 48 バイト。日本語だけなら 16 文字が上限になる。
+本番 D1 で確認済み（50 バイトは通り、51 バイトで `SQLITE_ERROR [code: 7500]`）。
 
 **スキーマ定義は 2 か所にあり、テストで守る。** テーブルの実体は `sync.ts` の
 DDL が作り、読み取りの型付けは `schema.ts` が担う。片方だけ変更すると
@@ -140,7 +147,13 @@ bun run test        # workerd 上で実行（D1 も実物を使う）
 bun run lint        # oxlint（型認識ルール込み）
 bun run format      # oxfmt
 bun run cf-typegen  # wrangler.jsonc 変更後に型を再生成
+bun run db:init     # 本番 D1 に空のミラーを作る（既存テーブルは DROP される）
+bunx wrangler deploy
+bunx wrangler tail  # デプロイ後のリクエストログ
 ```
+
+`db:init` は `sync.ts` の DDL から SQL を生成して `--remote` に流すので、
+**実行するとミラーの中身は消える。** 空の DB を作り直すときだけ使う。
 
 ツールチェーンは TypeScript 7（Go 実装）+ oxlint + oxfmt。
 lint は `--type-aware` で動かしており、型情報を要するルール（`no-floating-promises`
@@ -157,16 +170,15 @@ CI は GitHub Actions（`.github/workflows/ci.yml`）で、PR と main への pu
 
 ## 残っている作業
 
-デプロイに必要な設定は、まだどれも入っていない。`worker/wrangler.jsonc` の
-`database_id` は検証時のプレースホルダのまま。
-
-1. Cloudflare 上に D1 を作り、`database_id` を差し替える
-2. `wrangler secret put` で Zaim の認証情報を登録する
-3. 同期スクリプト（手元で実行し、D1 の HTTP API 越しに書く）
-4. PWA（React + Vite + `@cloudflare/vite-plugin`）と、`wrangler.jsonc` の
+1. Cloudflare Access の設定と、PWA でのセッション挙動の確認。**同期より先に置く**
+   のは、workers.dev が今は無認証で公開されているため
+2. 同期スクリプト（手元で実行し、D1 の HTTP API 越しに書く）。あわせて本番 D1 での
+   `batch()` 失敗時ロールバックを確認する（ローカルの miniflare では確認済み）
+3. PWA（React + Vite + `@cloudflare/vite-plugin`）と、`wrangler.jsonc` の
    Static Assets 設定
-5. Cloudflare Access の設定と、PWA でのセッション挙動の確認
-6. 工程 ③ の編集プロキシ（`ZaimClient` に更新系メソッドを足すところから）
+4. 工程 ③ の編集プロキシ（`ZaimClient` に更新系メソッドを足すところから）。
+   `wrangler secret put` で Zaim の認証情報を入れるのもここ。同期を Worker の外へ
+   出したので、それまで本番に認証情報は要らない
 
 ## 運用メモ
 

@@ -7,8 +7,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "zaimviewer",
-      "database_id": "local-spike-placeholder",
+      "database_name": "zaim-viewer",
+      "database_id": "153c167b-caf5-44b5-8037-99857f1d81d0",
     },
   ],
 }

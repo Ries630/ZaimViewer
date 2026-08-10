@@ -6,6 +6,8 @@ worker/.dev.vars
 worker/node_modules/
 worker/.wrangler/
 worker/worker-configuration.d.ts
+# db:init が sync.ts の DDL から生成する。スキーマの正は sync.ts 側
+worker/.schema.sql
 
 # PWA
 web/node_modules/
