@@ -171,12 +171,15 @@ CI は GitHub Actions（`.github/workflows/ci.yml`）で、PR と main への pu
 ## 残っている作業
 
 1. Cloudflare Access の設定と、PWA でのセッション挙動の確認。**同期より先に置く**
-   のは、workers.dev が今は無認証で公開されているため
-2. 同期スクリプト（手元で実行し、D1 の HTTP API 越しに書く）。あわせて本番 D1 での
+   のは、workers.dev が今は無認証で公開されているため。認証は Google、セッションは
+   1 か月。カスタムドメインは要らない（workers.dev をワンクリックで保護できる）
+2. Access の JWT（`Cf-Access-Jwt-Assertion`）を Worker 側でも検証する。エッジの
+   判定だけに頼ると、設定ミスや Preview URL の漏れが静かな素通りになる
+3. 同期スクリプト（手元で実行し、D1 の HTTP API 越しに書く）。あわせて本番 D1 での
    `batch()` 失敗時ロールバックを確認する（ローカルの miniflare では確認済み）
-3. PWA（React + Vite + `@cloudflare/vite-plugin`）と、`wrangler.jsonc` の
+4. PWA（React + Vite + `@cloudflare/vite-plugin`）と、`wrangler.jsonc` の
    Static Assets 設定
-4. 工程 ③ の編集プロキシ（`ZaimClient` に更新系メソッドを足すところから）。
+5. 工程 ③ の編集プロキシ（`ZaimClient` に更新系メソッドを足すところから）。
    `wrangler secret put` で Zaim の認証情報を入れるのもここ。同期を Worker の外へ
    出したので、それまで本番に認証情報は要らない
 
@@ -185,8 +188,6 @@ CI は GitHub Actions（`.github/workflows/ci.yml`）で、PR と main への pu
 - Grafana（Mac mini の :3080）からミラーを読む構想があったが、D1 へ移したため
   そのままでは繋がらない。集計・推移が必要になったら、Worker 側に集計エンドポイントを
   足すか、Grafana の JSON データソースを使う
-- Git はユーザー確認なしにコミットしてよい（このリポジトリのコードはユーザーが直接触らないため）。
-  ただし GitHub への push やリポジトリ公開は外部への公開にあたるため確認する
 - コミットは Conventional Commits、本文は日本語
 - 旧 Python 実装は完全に削除済み。`src/zaimviewer/`、`tests/`、`.venv`、
   `data/zaim.db`、`__pycache__` のいずれも手元に残っていない
