@@ -188,8 +188,6 @@ CI は GitHub Actions（`.github/workflows/ci.yml`）で、PR と main への pu
 - Grafana（Mac mini の :3080）からミラーを読む構想があったが、D1 へ移したため
   そのままでは繋がらない。集計・推移が必要になったら、Worker 側に集計エンドポイントを
   足すか、Grafana の JSON データソースを使う
-- Git はユーザー確認なしにコミットしてよい（このリポジトリのコードはユーザーが直接触らないため）。
-  ただし GitHub への push やリポジトリ公開は外部への公開にあたるため確認する
 - コミットは Conventional Commits、本文は日本語
 - 旧 Python 実装は完全に削除済み。`src/zaimviewer/`、`tests/`、`.venv`、
   `data/zaim.db`、`__pycache__` のいずれも手元に残っていない
