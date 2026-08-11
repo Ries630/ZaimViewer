@@ -176,6 +176,13 @@ lint は `--type-aware` で動かしており、型情報を要するルール�
 走るため `tsconfig.scripts.json` で別に検査する。Workers と Bun の型を同じ
 プログラムに混ぜると `fetch` などの宣言が衝突するため。`bun run typecheck` は両方走る。
 
+**`worker-configuration.d.ts` は手元と CI で違う型になる。** 追跡していない生成物で、
+`wrangler.jsonc` の `vars` をリテラル型として出す。ただし `.dev.vars` が同じ名前を
+上書きしていると `string` に広がるため、`.dev.vars` の無い CI ではリテラルのままになる。
+**手元の型検査が通っても CI で落ちうる**のはこれが理由。env を書き換えるテストは
+生成物の型ではなく宣言された型を経由する（`test/access-harness.ts` の `accessEnv`）。
+CI と同じ型で確かめたいときは `.dev.vars` を退避して `bun run cf-typegen` し直す。
+
 同期はローカルでは `curl -X POST http://127.0.0.1:8787/api/sync`（約 17 秒、44 リクエスト）。
 本番向けは `bun run sync`（約 22 秒）。運用手順は [`ops/README.md`](ops/README.md)。
 

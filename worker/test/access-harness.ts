@@ -21,7 +21,14 @@ import { type AccessEnv } from "../src/access";
  *
  * `wrangler types` は `wrangler.jsonc` の vars をリテラル型で出力するため
  * （`TEAM_DOMAIN: "https://rieslab.cloudflareaccess.com"`）、`env` に直接
- * テスト用の値を入れると型が合わない。ここだけ宣言された型に緩める。
+ * テスト用の値を入れると型が合わない。
+ *
+ * さらに厄介なのは、この生成物が**手元と CI で違う型になる**こと。
+ * `worker-configuration.d.ts` は追跡しておらず（`.gitignore`）、`.dev.vars` が
+ * ある手元では `ENVIRONMENT: string` に広がるが、`.dev.vars` の無い CI では
+ * `ENVIRONMENT: "production"` のリテラルになる。手元の型検査だけを見ていると
+ * CI でしか出ないエラーになるので、テストが env を書き換えるときは
+ * 生成物の型ではなく、この宣言された型を経由する。
  */
 export const accessEnv = env as AccessEnv;
 

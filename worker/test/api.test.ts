@@ -3,7 +3,7 @@
 import { SELF, env } from "cloudflare:test";
 import { beforeAll, expect, it, vi } from "vitest";
 
-import { installAccess, issueToken, withToken } from "./access-harness";
+import { accessEnv, installAccess, issueToken, withToken } from "./access-harness";
 import { SYNCED_AT, TRANSACTION_COUNT, seedDatabase } from "./fixtures";
 
 /** テスト用の絶対 URL を組み立てる。 */
@@ -88,7 +88,7 @@ it("本番では POST /api/sync が閉じている", async () => {
   // .dev.vars の有無で既定値が変わるため、ここでは明示的に上書きして固定する。
   // 本番では Access の JWT 検証も効くので、正しい JWT を付けて通り抜けた先を見る。
   // 付けないと 403 で止まり、ルート自身が閉じているかを確かめられない
-  const original = env.ENVIRONMENT;
+  const original = accessEnv.ENVIRONMENT;
   await installAccess();
   try {
     const res = await SELF.fetch(
@@ -97,7 +97,7 @@ it("本番では POST /api/sync が閉じている", async () => {
     );
     expect(res.status).toBe(404);
   } finally {
-    env.ENVIRONMENT = original;
+    accessEnv.ENVIRONMENT = original;
     vi.restoreAllMocks();
   }
 });

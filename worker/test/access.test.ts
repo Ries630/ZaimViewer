@@ -16,7 +16,7 @@ import { seedDatabase } from "./fixtures";
 let foreignKey: CryptoKey;
 
 /** テストが差し替える前の実行環境。後始末で戻す。 */
-const originalEnvironment = env.ENVIRONMENT;
+const originalEnvironment = accessEnv.ENVIRONMENT;
 
 beforeAll(async () => {
   await seedDatabase(env.DB);
@@ -25,7 +25,7 @@ beforeAll(async () => {
 });
 
 afterAll(() => {
-  env.ENVIRONMENT = originalEnvironment;
+  accessEnv.ENVIRONMENT = originalEnvironment;
 });
 
 /**
@@ -94,12 +94,12 @@ it("本番で POLICY_AUD が未設定なら、正しい JWT でも 403", async (
 });
 
 it("開発環境では JWT が無くても通る", async () => {
-  const saved = env.ENVIRONMENT;
-  env.ENVIRONMENT = "development";
+  const saved = accessEnv.ENVIRONMENT;
+  accessEnv.ENVIRONMENT = "development";
   try {
     const res = await callApi();
     expect(res.status).toBe(200);
   } finally {
-    env.ENVIRONMENT = saved;
+    accessEnv.ENVIRONMENT = saved;
   }
 });
