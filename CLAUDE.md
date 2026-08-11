@@ -57,6 +57,7 @@ Access セッション切れの検出は `src/api/` にある。**リポジト�
 仮想化は入れていない（デスクトップ Chrome を 393×852 で測った値。実機は未測定）。
 残りはフィルタ（[#15](https://github.com/Ries630/ZaimViewer/issues/15)）と
 PWA 化・実機確認（[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。
+**表示はライトに固定してある**（`src/index.css` の `color-scheme`）。
 ダークモードは DaisyUI の採否を決めてから入れる。
 
 **工程 ③ 編集機能: 未着手。** 単体編集 → フィルタ結果への一括編集。

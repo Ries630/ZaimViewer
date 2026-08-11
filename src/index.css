@@ -7,6 +7,23 @@
   --spacing-safe-bottom: env(safe-area-inset-bottom);
 }
 
+/* ライトに固定する。
+   背景色を宣言しないと、端末がダークモードのとき UA のキャンバスが黒くなる。
+   ヘッダだけ bg-white を持っているので上帯だけ白く残り、本文は黒地に
+   text-gray-900 の金額が乗って読めなくなる（実機で踏んだ）。
+   ダークモードそのものは DaisyUI の採否を決めてから入れる。素の Tailwind で
+   dark: を全コンポーネントに撒くと、テーマ機構に載せ替えるとき無駄になるため */
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  body {
+    background-color: var(--color-white);
+    color: var(--color-gray-900);
+  }
+}
+
 /* popover の UA 標準の枠線・余白・背景を落とす。
    @layer base に入れるのが肝で、レイヤの外に書くと Tailwind の
    ユーティリティ（bg-* / p-*）より強くなり、popover にだけ色も余白も
