@@ -44,14 +44,20 @@ transfer 491、2014-02〜2029-12。未来分は繰り返し登録の家賃）を
 同期処理そのものは Worker と同じ `src/sync.ts`。実測 22 秒で全件差し替わる。
 定期実行は launchd（毎日 06:00）。手順は [`ops/README.md`](ops/README.md)。
 
-**工程 ② PWA: 足場まで完了。** React 19 + Vite 8 + TypeScript + Tailwind CSS v4 +
+**工程 ② PWA: 明細一覧まで完了。** React 19 + Vite 8 + TypeScript + Tailwind CSS v4 +
 TanStack Query。`@cloudflare/vite-plugin` で Worker と単一の dev サーバ（:5173）で動き、
 ビルド成果物は Static Assets として同じ Worker から配信される。RPC クライアントと
 Access セッション切れの検出は `src/api/` にある。**リポジトリルートがアプリのルート**で、
 `src/` がクライアント、`worker/src/` が Worker（[ADR-0020](docs/adr/0020-single-package-vite-worker.md)）。
-残りは明細一覧（[#14](https://github.com/Ries630/ZaimViewer/issues/14)）、
-フィルタ（[#15](https://github.com/Ries630/ZaimViewer/issues/15)）、
-PWA 化と実機確認（[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。
+
+明細一覧は `useInfiniteQuery` + `IntersectionObserver` の無限スクロール
+（[#14](https://github.com/Ries630/ZaimViewer/issues/14)）。フィルタがまだ無いので
+全 4,370 件が対象で、先頭には繰り返し登録の家賃（2029-12 まで）が並ぶ。
+**全件を描いても DOM 33,624 ノード / ヒープ 172MB / スクロールは実質 0ms** なので
+仮想化は入れていない（デスクトップ Chrome を 393×852 で測った値。実機は未測定）。
+残りはフィルタ（[#15](https://github.com/Ries630/ZaimViewer/issues/15)）と
+PWA 化・実機確認（[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。
+ダークモードは DaisyUI の採否を決めてから入れる。
 
 **工程 ③ 編集機能: 未着手。** 単体編集 → フィルタ結果への一括編集。
 いずれも Zaim 更新 API へ順次反映する。署名側は POST + フォームボディまで
@@ -155,6 +161,19 @@ DDL が作り、読み取りの型付けは `schema.ts` が担う。片方だけ
 `PRAGMA table_info` と突き合わせて検出する。テストの固定データも `sync.ts` の
 DDL と差し替え処理をそのまま使うので、スキーマの写しは増えない。
 
+**クライアントのテストは純関数だけで、workerd 上で走る。** vitest は全ファイルを
+`@cloudflare/vitest-pool-workers` に載せるので、DOM を要するテストは書けない。
+整形・フォールバック・日付のまとめといった壊れやすい部分を `src/lib/` の純関数に
+切り出し、コンポーネントは型検査とブラウザでの目視で見ている。**`Intl` の出力は
+実行環境の ICU に依存する**点に注意（例: ja-JP の JPY は workerd とブラウザでは
+全角の ￥ だが、Bun では半角の ¥ になる）。テストが固定しているのは workerd の
+出力で、そちらが CLDR とブラウザに一致する。
+
+**RPC のレスポンスは `src/api/client.ts` の `unwrap` を通す。** `zValidator` のある
+ルートは成功と 400 の union になり、`res.ok` で分岐しても `json()` の型は union の
+ままなので、型の側でも成功側を選び出す必要がある。判定は status で行う（成功側は
+`ContentfulStatusCode`、エラー側は `400` のリテラル）。
+
 **フィルタの SQL 組み立ては `worker/src/queries.ts` に閉じる。** 「除外はクエリの
 ルールで表現する」の実装箇所。よく使う除外条件に名前を付けるプリセット層を将来
 載せる場合も、その層は `TransactionFilter` を組み立てるだけでよく SQL を書かずに済む。
@@ -225,12 +244,14 @@ Cloudflare の認証情報（`Account > D1 > Edit` のトークン）が必要
 
 ## 残っている作業
 
-1. 明細一覧（[#14](https://github.com/Ries630/ZaimViewer/issues/14)）とフィルタ
-   （[#15](https://github.com/Ries630/ZaimViewer/issues/15)）
-2. PWA 化と、ホーム画面から起動したときの Access 再認証の実機確認
+1. DaisyUI を採用するかの判断。#14 の実物と、DaisyUI を当てた捨てブランチを
+   見比べて決める。フィルタパネルのフォーム部品が本命なので、捨てブランチには
+   #15 の見た目のモックも置く。決めたら ADR（採用でも不採用でも）
+2. フィルタパネル（[#15](https://github.com/Ries630/ZaimViewer/issues/15)）
+3. PWA 化と、ホーム画面から起動したときの Access 再認証の実機確認
    （[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。ADR-0016 を
    「承認済み」にできるのはここ
-3. 工程 ③ の編集プロキシ（`ZaimClient` に更新系メソッドを足すところから）。
+4. 工程 ③ の編集プロキシ（`ZaimClient` に更新系メソッドを足すところから）。
    `wrangler secret put` で Zaim の認証情報を入れるのもここ。同期を Worker の外へ
    出したので、それまで本番に認証情報は要らない
 
