@@ -14,10 +14,9 @@
     "TEAM_DOMAIN": "https://rieslab.cloudflareaccess.com",
     // 本番 URL と Preview URL は別の Access アプリで AUD が異なる。
     // 1 個目が zaimviewer.ries.workers.dev、2 個目が Preview URL。
-    // TODO: Zero Trust ダッシュボードの Application Audience (AUD) Tag を
-    // 全桁で入れる（下は先頭だけ分かっている状態。このままデプロイすると
-    // AUD 不一致で全リクエストが 403 になる）
-    "POLICY_AUD": "938ee7cc3f-REPLACE-ME,060865f65b-REPLACE-ME",
+    // Zero Trust ダッシュボードの Application Audience (AUD) Tag の値で、
+    // Access アプリを作り直したら入れ替えて deploy し直す
+    "POLICY_AUD": "938ee7cc3ff338388216d65bf32f09e5d482f74e709bd09bd89130335101eb4b,060865f65b476a9e5e717ff06fbecbdb306e91d9eebd2f28defa610425e6f82f",
   },
   "d1_databases": [
     {
