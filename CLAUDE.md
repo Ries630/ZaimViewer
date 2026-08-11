@@ -53,8 +53,8 @@ Access セッション切れの検出は `src/api/` にある。**リポジト�
 明細一覧は `useInfiniteQuery` + `IntersectionObserver` の無限スクロール
 （[#14](https://github.com/Ries630/ZaimViewer/issues/14)）。フィルタがまだ無いので
 全 4,370 件が対象で、先頭には繰り返し登録の家賃（2029-12 まで）が並ぶ。
-**全件を描いても DOM 33,624 ノード / ヒープ 172MB / スクロールは実質 0ms** なので
-仮想化は入れていない（デスクトップ Chrome を 393×852 で測った値。実機は未測定）。
+**一覧は仮想化していない**（測定値と再評価のサインは
+[ADR-0021](docs/adr/0021-no-list-virtualization.md)）。
 残りはフィルタ（[#15](https://github.com/Ries630/ZaimViewer/issues/15)）と
 PWA 化・実機確認（[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。
 **表示はライトに固定してある**（`src/index.css` の `color-scheme`）。
@@ -141,6 +141,7 @@ AUD を両方許す。本番で設定が欠けていれば全リクエストが 
 | 同期の書き込みは D1 の HTTP API を叩く自作ドライバ（`worker/src/d1-http.ts`） | [0018](docs/adr/0018-d1-http-api-for-sync.md) |
 | Access の JWT を Worker 自身でも検証する。設定は `vars`、本番・Preview 両方の AUD を許す | [0019](docs/adr/0019-verify-access-jwt-in-worker.md) |
 | PWA と Worker を 1 パッケージに同居させ、リポジトリルートをアプリのルートにする。静的アセットは Worker を通さない | [0020](docs/adr/0020-single-package-vite-worker.md) |
+| 明細一覧を仮想化せず、取得済みの全件を素の DOM で描く | [0021](docs/adr/0021-no-list-virtualization.md) |
 
 以下はコードとテストが守っているもので、ADR にはしていない。
 
