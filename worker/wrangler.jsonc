@@ -4,9 +4,21 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-01-01",
   "observability": { "enabled": true },
-  // ローカル開発では .dev.vars の ENVIRONMENT=development が上書きする。
-  // POST /api/sync を本番で閉じるために使う（同期は scripts/sync.ts が正）
-  "vars": { "ENVIRONMENT": "production" },
+  "vars": {
+    // ローカル開発では .dev.vars の ENVIRONMENT=development が上書きする。
+    // POST /api/sync を本番で閉じるのと、Access の JWT 検証の有無に使う
+    "ENVIRONMENT": "production",
+    // Access の JWT 検証（src/access.ts）。どちらも秘密ではない
+    // （知られても JWT は偽造できない）ので secret ではなくここに置く。
+    // vars ならリポジトリに入るため、本番だけ入れ忘れる経路が無くなる
+    "TEAM_DOMAIN": "https://rieslab.cloudflareaccess.com",
+    // 本番 URL と Preview URL は別の Access アプリで AUD が異なる。
+    // 1 個目が zaimviewer.ries.workers.dev、2 個目が Preview URL。
+    // TODO: Zero Trust ダッシュボードの Application Audience (AUD) Tag を
+    // 全桁で入れる（下は先頭だけ分かっている状態。このままデプロイすると
+    // AUD 不一致で全リクエストが 403 になる）
+    "POLICY_AUD": "938ee7cc3f-REPLACE-ME,060865f65b-REPLACE-ME",
+  },
   "d1_databases": [
     {
       "binding": "DB",

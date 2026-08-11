@@ -89,6 +89,12 @@ Mac mini がスリープ中でも閲覧できる（ミラーが古くなるだ�
 書き込みは D1 の HTTP API で、バッチが 1 トランザクションになることは本番で確認済み
 → [ADR-0018](docs/adr/0018-d1-http-api-for-sync.md)
 
+**Access の JWT は Worker 自身でも検証する。** エッジの判定だけに頼らず、
+`Cf-Access-Jwt-Assertion` を `worker/src/access.ts` で検証する。`TEAM_DOMAIN` と
+`POLICY_AUD` は秘密でないので `wrangler.jsonc` の `vars` に置き、本番と Preview の
+AUD を両方許す。本番で設定が欠けていれば全リクエストが 403 になる（fail closed）
+→ [ADR-0019](docs/adr/0019-verify-access-jwt-in-worker.md)
+
 **未検証: Cloudflare Access の挙動。** ホーム画面から起動した PWA でセッションが
 切れたときの再認証は、PWA ができるまで分からない。セッション期間は最長 1 か月
 → [ADR-0016](docs/adr/0016-cloudflare-access.md)（提案のまま）
@@ -114,6 +120,7 @@ Mac mini がスリープ中でも閲覧できる（ミラーが古くなるだ�
 | 同期は Worker の外で実行する | [0015](docs/adr/0015-sync-outside-worker.md) |
 | 設計判断は ADR として残す | [0017](docs/adr/0017-adr-in-repo.md) |
 | 同期の書き込みは D1 の HTTP API を叩く自作ドライバ（`worker/src/d1-http.ts`） | [0018](docs/adr/0018-d1-http-api-for-sync.md) |
+| Access の JWT を Worker 自身でも検証する。設定は `vars`、本番・Preview 両方の AUD を許す | [0019](docs/adr/0019-verify-access-jwt-in-worker.md) |
 
 以下はコードとテストが守っているもので、ADR にはしていない。
 
@@ -183,11 +190,9 @@ Cloudflare の認証情報（`Account > D1 > Edit` のトークン）が必要
 
 ## 残っている作業
 
-1. Access の JWT（`Cf-Access-Jwt-Assertion`）を Worker 側でも検証する。エッジの
-   判定だけに頼ると、設定ミスや Preview URL の漏れが静かな素通りになる
-2. PWA（React + Vite + `@cloudflare/vite-plugin`）と、`wrangler.jsonc` の
+1. PWA（React + Vite + `@cloudflare/vite-plugin`）と、`wrangler.jsonc` の
    Static Assets 設定。ホーム画面から起動したときの Access 再認証の確認もここで
-3. 工程 ③ の編集プロキシ（`ZaimClient` に更新系メソッドを足すところから）。
+2. 工程 ③ の編集プロキシ（`ZaimClient` に更新系メソッドを足すところから）。
    `wrangler secret put` で Zaim の認証情報を入れるのもここ。同期を Worker の外へ
    出したので、それまで本番に認証情報は要らない
 

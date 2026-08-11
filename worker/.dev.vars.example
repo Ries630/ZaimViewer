@@ -19,3 +19,7 @@ ENVIRONMENT=development
 CLOUDFLARE_ACCOUNT_ID=
 CLOUDFLARE_API_TOKEN=
 D1_DATABASE_ID=
+
+# Access の JWT 検証（src/access.ts）はローカルでは動かない。
+# ENVIRONMENT=production のときだけ検証し、TEAM_DOMAIN / POLICY_AUD は
+# 秘密でないので wrangler.jsonc の vars に置いてある（ADR-0019）
