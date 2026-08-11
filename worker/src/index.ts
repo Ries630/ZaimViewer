@@ -13,6 +13,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
 import { z } from "zod";
 
+import { type AccessEnv, accessGuard } from "./access";
 import { type OAuth1Credentials } from "./oauth1";
 import { countTransactions, fetchTransactions, type TransactionFilter } from "./queries";
 import { accounts, categories, genres, syncMeta } from "./schema";
@@ -20,10 +21,8 @@ import { syncAll } from "./sync";
 import { ZaimClient } from "./zaim";
 
 /** Worker の環境バインディング。 */
-interface Env {
+interface Env extends AccessEnv {
   DB: D1Database;
-  /** 実行環境。`wrangler.jsonc` で "production"、`.dev.vars` が上書きして "development"。 */
-  ENVIRONMENT: string;
   ZAIM_CONSUMER_KEY: string;
   ZAIM_CONSUMER_SECRET: string;
   ZAIM_ACCESS_TOKEN: string;
@@ -116,6 +115,14 @@ const transactionQuery = z.object({
 });
 
 const app = new Hono<{ Bindings: Env }>();
+
+/**
+ * Access の JWT 検証。すべてのルートより前に置く。
+ *
+ * ルートチェーンとは別の文にしてあるが、ミドルウェアは RPC の型に
+ * 寄与しないので `AppType` は変わらない。
+ */
+app.use("*", accessGuard);
 
 /**
  * ルート定義。

@@ -11,6 +11,11 @@ export default defineConfig({
       wrangler: { configPath: "./wrangler.jsonc" },
       miniflare: {
         d1Databases: ["DB"],
+        // wrangler.jsonc の vars は ENVIRONMENT=production なので、そのままだと
+        // Access の JWT 検証が全テストで効いて 403 になる。手元の .dev.vars と
+        // 同じく development に倒し、検証そのものは access.test.ts が
+        // env を production に切り替えて確かめる
+        bindings: { ENVIRONMENT: "development" },
       },
     }),
   ],

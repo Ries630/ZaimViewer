@@ -1,8 +1,9 @@
 /** HTTP レイヤ（パラメータの受け渡しと検証）を確認する。 */
 
 import { SELF, env } from "cloudflare:test";
-import { beforeAll, expect, it } from "vitest";
+import { beforeAll, expect, it, vi } from "vitest";
 
+import { accessEnv, installAccess, issueToken, withToken } from "./access-harness";
 import { SYNCED_AT, TRANSACTION_COUNT, seedDatabase } from "./fixtures";
 
 /** テスト用の絶対 URL を組み立てる。 */
@@ -84,13 +85,19 @@ it("同期メタ情報が取得できる", async () => {
 
 it("本番では POST /api/sync が閉じている", async () => {
   // 同期は Worker 内では上限に収まらず、手元の scripts/sync.ts が正（ADR-0015）。
-  // .dev.vars の有無で既定値が変わるため、ここでは明示的に上書きして固定する
-  const original = env.ENVIRONMENT;
-  env.ENVIRONMENT = "production";
+  // .dev.vars の有無で既定値が変わるため、ここでは明示的に上書きして固定する。
+  // 本番では Access の JWT 検証も効くので、正しい JWT を付けて通り抜けた先を見る。
+  // 付けないと 403 で止まり、ルート自身が閉じているかを確かめられない
+  const original = accessEnv.ENVIRONMENT;
+  await installAccess();
   try {
-    const res = await SELF.fetch(url("/api/sync"), { method: "POST" });
+    const res = await SELF.fetch(
+      url("/api/sync"),
+      withToken(await issueToken(), { method: "POST" }),
+    );
     expect(res.status).toBe(404);
   } finally {
-    env.ENVIRONMENT = original;
+    accessEnv.ENVIRONMENT = original;
+    vi.restoreAllMocks();
   }
 });
