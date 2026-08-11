@@ -1,9 +1,19 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "zaimviewer",
-  "main": "src/index.ts",
+  "main": "worker/src/index.ts",
   "compatibility_date": "2026-01-01",
   "observability": { "enabled": true },
+  "assets": {
+    // PWA のビルド成果物を同じ Worker から配信する。iPhone からの入口を
+    // ひとつにするため。directory は Vite プラグインがクライアントの
+    // ビルド出力に自動で向けるので、ここには書かない
+    "not_found_handling": "single-page-application",
+    // 既定では静的アセットが Worker より先に返るため、index.html も JS も
+    // src/access.ts の JWT 検証を通らない。家計データはすべて /api/* の
+    // 向こうにあるので、Worker を先に走らせるのはそこだけでよい（ADR-0020）
+    "run_worker_first": ["/api/*"],
+  },
   "vars": {
     // ローカル開発では .dev.vars の ENVIRONMENT=development が上書きする。
     // POST /api/sync を本番で閉じるのと、Access の JWT 検証の有無に使う

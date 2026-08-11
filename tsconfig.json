@@ -1,0 +1,22 @@
+// PWA のクライアント（src/）と、リポジトリルートの設定ファイルを検査する。
+//
+// 型検査は 3 プログラムに分かれている。ここがクライアント、worker/tsconfig.json が
+// Worker 本体とそのテスト、worker/tsconfig.scripts.json が手元で走るスクリプト。
+// クライアントは DOM の型が要り、Worker は要らない。同じプログラムに混ぜると
+// fetch や Response の宣言が衝突する。
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts", "vite.config.ts", "vitest.config.ts"]
+}

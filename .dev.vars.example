@@ -5,7 +5,7 @@ ZAIM_CONSUMER_SECRET=
 ZAIM_ACCESS_TOKEN=
 ZAIM_ACCESS_TOKEN_SECRET=
 
-# ローカル開発では worker/.dev.vars に置く（wrangler dev が自動で読む）。
+# ローカル開発ではリポジトリルートの .dev.vars に置く（vite dev が自動で読む）。
 # 本番へは wrangler secret put <NAME> で登録する。
 # ただし同期を Worker の外へ出した（ADR-0015）ので、Zaim の認証情報を
 # 本番に入れるのは編集プロキシ（工程③）を作るときで足りる。

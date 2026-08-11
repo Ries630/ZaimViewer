@@ -1,14 +1,15 @@
 # 認証情報
 .env
-worker/.dev.vars
+.dev.vars
+
+# 依存とビルド成果物
+node_modules/
+# vite build の出力。dist/client が静的アセット、dist/zaimviewer が Worker。
+# .dev.vars が複製されるので、絶対に追跡しない
+dist/
 
 # Worker
-worker/node_modules/
-worker/.wrangler/
-worker/worker-configuration.d.ts
+.wrangler/
+worker-configuration.d.ts
 # db:init が sync.ts の DDL から生成する。スキーマの正は sync.ts 側
-worker/.schema.sql
-
-# PWA
-web/node_modules/
-web/dist/
+.schema.sql

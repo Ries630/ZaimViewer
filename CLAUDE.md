@@ -44,9 +44,14 @@ transfer 491、2014-02〜2029-12。未来分は繰り返し登録の家賃）を
 同期処理そのものは Worker と同じ `src/sync.ts`。実測 22 秒で全件差し替わる。
 定期実行は launchd（毎日 06:00）。手順は [`ops/README.md`](ops/README.md)。
 
-**工程 ② PWA: 次はここから。** React + Vite + TypeScript + Tailwind CSS v4。
-明細一覧（無限スクロール）とフィルタパネル。モバイルファースト。
-ビルド成果物は Workers の Static Assets として同じ Worker から配信する。
+**工程 ② PWA: 足場まで完了。** React 19 + Vite 8 + TypeScript + Tailwind CSS v4 +
+TanStack Query。`@cloudflare/vite-plugin` で Worker と単一の dev サーバ（:5173）で動き、
+ビルド成果物は Static Assets として同じ Worker から配信される。RPC クライアントと
+Access セッション切れの検出は `src/api/` にある。**リポジトリルートがアプリのルート**で、
+`src/` がクライアント、`worker/src/` が Worker（[ADR-0020](docs/adr/0020-single-package-vite-worker.md)）。
+残りは明細一覧（[#14](https://github.com/Ries630/ZaimViewer/issues/14)）、
+フィルタ（[#15](https://github.com/Ries630/ZaimViewer/issues/15)）、
+PWA 化と実機確認（[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。
 
 **工程 ③ 編集機能: 未着手。** 単体編集 → フィルタ結果への一括編集。
 いずれも Zaim 更新 API へ順次反映する。署名側は POST + フォームボディまで
@@ -65,7 +70,9 @@ transfer 491、2014-02〜2029-12。未来分は繰り返し登録の家賃）を
 | lint / format | oxlint + oxfmt | `oxlint-tsgolint` で型認識ルールが効く |
 | テスト | vitest + `@cloudflare/vitest-pool-workers` | workerd 上で実物の D1 を使う |
 | パッケージ管理 | bun | peer dependency の解決が緩いので、更新時は要注意 |
-| PWA（予定） | React + Vite + `@cloudflare/vite-plugin` | Worker と単一の dev サーバで動き、同一オリジンで API を叩ける |
+| PWA | React + Vite + `@cloudflare/vite-plugin` | Worker と単一の dev サーバで動き、同一オリジンで API を叩ける |
+| スタイル | Tailwind CSS v4（`@tailwindcss/vite`） | 設定ファイルを持たず CSS 側で完結する |
+| データ取得 | TanStack Query | `useInfiniteQuery` が無限スクロールに、キャッシュがフィルタ切り替えに効く |
 
 **不採用にしたもの。** 理由と再評価のサインは各 ADR にある。
 
@@ -88,6 +95,11 @@ Mac mini がスリープ中でも閲覧できる（ミラーが古くなるだ�
 アトミック差し替えもこの構成で維持できる（原子性が要るのは差し替えの 13 文だけ）。
 書き込みは D1 の HTTP API で、バッチが 1 トランザクションになることは本番で確認済み
 → [ADR-0018](docs/adr/0018-d1-http-api-for-sync.md)
+
+**静的アセットは Worker を通らない。** `assets.run_worker_first` を `["/api/*"]` に
+してあるため、`index.html` / JS / CSS は Access のエッジ判定だけで守られる。
+家計データはすべて `/api/*` の向こうにあり、そこは Worker の JWT 検証も通る
+→ [ADR-0020](docs/adr/0020-single-package-vite-worker.md)
 
 **Access の JWT は Worker 自身でも検証する。** エッジの判定だけに頼らず、
 `Cf-Access-Jwt-Assertion` を `worker/src/access.ts` で検証する。`TEAM_DOMAIN` と
@@ -121,6 +133,7 @@ AUD を両方許す。本番で設定が欠けていれば全リクエストが 
 | 設計判断は ADR として残す | [0017](docs/adr/0017-adr-in-repo.md) |
 | 同期の書き込みは D1 の HTTP API を叩く自作ドライバ（`worker/src/d1-http.ts`） | [0018](docs/adr/0018-d1-http-api-for-sync.md) |
 | Access の JWT を Worker 自身でも検証する。設定は `vars`、本番・Preview 両方の AUD を許す | [0019](docs/adr/0019-verify-access-jwt-in-worker.md) |
+| PWA と Worker を 1 パッケージに同居させ、リポジトリルートをアプリのルートにする。静的アセットは Worker を通さない | [0020](docs/adr/0020-single-package-vite-worker.md) |
 
 以下はコードとテストが守っているもので、ADR にはしていない。
 
@@ -151,11 +164,11 @@ DDL と差し替え処理をそのまま使うので、スキーマの写しは�
 ## 開発
 
 ```bash
-cd worker
 bun install
-bun run dev         # ローカル D1 で :8787 に起動
+bun run dev         # PWA と Worker を :5173 に同居させて起動（ローカル D1）
+bun run build       # PWA と Worker をビルド（dist/client と dist/zaimviewer）
 bun run sync        # 本番 D1 を Zaim から全件更新（手元で実行する同期）
-bun run check       # format:check → lint → typecheck → test を一括
+bun run check       # format:check → lint → typecheck → test → build を一括
 bun run test        # workerd 上で実行（D1 も実物を使う）
 bun run lint        # oxlint（型認識ルール込み）
 bun run format      # oxfmt
@@ -165,6 +178,10 @@ bunx wrangler deploy
 bunx wrangler tail  # デプロイ後のリクエストログ
 ```
 
+**コマンドはすべてリポジトリルートで実行する。** `worker/` にあった
+`package.json` などは ADR-0020 でルートへ上がった。`worker/` に残っているのは
+Worker のソース・テスト・スクリプトと、その tsconfig 2 つだけ。
+
 `db:init` は `sync.ts` の DDL から SQL を生成して `--remote` に流すので、
 **実行するとミラーの中身は消える。** 空の DB を作り直すときだけ使う。
 
@@ -172,9 +189,20 @@ bunx wrangler tail  # デプロイ後のリクエストログ
 lint は `--type-aware` で動かしており、型情報を要するルール（`no-floating-promises`
 など）も効く。これは `oxlint-tsgolint` が入っていることが前提。
 
-**型検査は 2 プログラムに分かれている。** `scripts/` は Worker ではなく Bun で
-走るため `tsconfig.scripts.json` で別に検査する。Workers と Bun の型を同じ
-プログラムに混ぜると `fetch` などの宣言が衝突するため。`bun run typecheck` は両方走る。
+**型検査は 3 プログラムに分かれている。** ルートの `tsconfig.json` がクライアント
+（`src/`、DOM の型が要る）、`worker/tsconfig.json` が Worker 本体とテスト、
+`worker/tsconfig.scripts.json` が手元の Bun で走る `worker/scripts/`。Workers と
+DOM と Bun はいずれも `fetch` などの宣言が衝突するため混ぜられない。
+`bun run typecheck` は 3 つとも走る。
+
+**Worker の tsconfig は `worker/` に置いたままにする。** oxlint はファイルごとに
+tsconfig を自動探索するので、ルートに 1 つだけ置くと Worker 側で型認識ルールが
+黙って効かなくなる。移動時に floating promise を仕込んで検出されることを確認した。
+
+**クライアントは `src/worker-globals.d.ts` で Workers のグローバルを潰している。**
+`hc<AppType>` のために Worker のソースがクライアント側のプログラムに取り込まれ、
+`D1Database` などが解決できないため。生成物をクライアントの `types` に足すと
+DOM と衝突するので採れない。本物の型による検査は `worker/tsconfig.json` が担う。
 
 **`worker-configuration.d.ts` は手元と CI で違う型になる。** 追跡していない生成物で、
 `wrangler.jsonc` の `vars` をリテラル型として出す。ただし `.dev.vars` が同じ名前を
@@ -183,23 +211,26 @@ lint は `--type-aware` で動かしており、型情報を要するルール�
 生成物の型ではなく宣言された型を経由する（`test/access-harness.ts` の `accessEnv`）。
 CI と同じ型で確かめたいときは `.dev.vars` を退避して `bun run cf-typegen` し直す。
 
-同期はローカルでは `curl -X POST http://127.0.0.1:8787/api/sync`（約 17 秒、44 リクエスト）。
+同期はローカルでは `curl -X POST http://localhost:5173/api/sync`（約 17 秒、44 リクエスト）。
 本番向けは `bun run sync`（約 22 秒）。運用手順は [`ops/README.md`](ops/README.md)。
 
 CI は GitHub Actions（`.github/workflows/ci.yml`）で、PR と main への push に
 `bun run check` を実行する。Zaim の認証情報も Cloudflare へのログインも要らない。
 
-`worker/.dev.vars` に Zaim の OAuth1.0a 認証情報と、同期スクリプト用の
+`.dev.vars`（リポジトリルート）に Zaim の OAuth1.0a 認証情報と、同期スクリプト用の
 Cloudflare の認証情報（`Account > D1 > Edit` のトークン）が必要
-（`worker/.dev.vars.example` 参照）。Zaim 側の値は `~/.claude.json` の
+（`.dev.vars.example` 参照）。Zaim 側の値は `~/.claude.json` の
 `mcpServers.zaim-api` に設定済みのものと同一。本番 Worker へは
 `wrangler secret put` で入れるが、工程 ③ まではその必要が無い。
 
 ## 残っている作業
 
-1. PWA（React + Vite + `@cloudflare/vite-plugin`）と、`wrangler.jsonc` の
-   Static Assets 設定。ホーム画面から起動したときの Access 再認証の確認もここで
-2. 工程 ③ の編集プロキシ（`ZaimClient` に更新系メソッドを足すところから）。
+1. 明細一覧（[#14](https://github.com/Ries630/ZaimViewer/issues/14)）とフィルタ
+   （[#15](https://github.com/Ries630/ZaimViewer/issues/15)）
+2. PWA 化と、ホーム画面から起動したときの Access 再認証の実機確認
+   （[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。ADR-0016 を
+   「承認済み」にできるのはここ
+3. 工程 ③ の編集プロキシ（`ZaimClient` に更新系メソッドを足すところから）。
    `wrangler secret put` で Zaim の認証情報を入れるのもここ。同期を Worker の外へ
    出したので、それまで本番に認証情報は要らない
 
