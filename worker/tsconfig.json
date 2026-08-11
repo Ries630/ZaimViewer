@@ -1,10 +1,12 @@
+// Worker 本体（src/）とそのテスト（test/）を検査する。
+// クライアント（../src/）とは lib が異なる（DOM の有無）ため別プログラム。
 {
   "compilerOptions": {
     "target": "ES2024",
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "lib": ["ES2024"],
-    "types": ["./worker-configuration.d.ts", "@cloudflare/vitest-pool-workers/types"],
+    "types": ["../worker-configuration.d.ts", "@cloudflare/vitest-pool-workers/types"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noEmit": true,
@@ -12,6 +14,6 @@
     "verbatimModuleSyntax": true
   },
   // scripts/ は Bun で走るので tsconfig.scripts.json 側で検査する。
-  // Workers と Bun の型を同じプログラムに混ぜると fetch などの宣言が衝突する
-  "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts"]
+  // vitest.config.ts はリポジトリルートにあり、クライアント側の tsconfig が見る
+  "include": ["src/**/*.ts", "test/**/*.ts"]
 }

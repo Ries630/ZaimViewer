@@ -1,0 +1,6 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  // Markdown は整形しない。oxfmt は表を桁揃えするが日本語の全角幅を
+  // 勘定しないため、かえってソースが読みにくくなる
+  "ignorePatterns": ["**/*.md"]
+}

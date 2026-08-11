@@ -13,9 +13,6 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: worker
 
     steps:
       - uses: actions/checkout@v5
@@ -32,7 +29,9 @@ jobs:
         # 型検査の前に作る必要がある
         run: bun run cf-typegen
 
-      - name: 整形・lint・型検査・テスト
-        # Zaim の認証情報は要らない。テストはミラー DB の読み取りだけで、
-        # 外部 API を叩くコードは通らない
+      - name: 整形・lint・型検査・テスト・ビルド
+        # Zaim の認証情報も Cloudflare へのログインも要らない。テストは
+        # ミラー DB の読み取りだけで、外部 API を叩くコードは通らない。
+        # PWA のビルドも通すのは、型が通ってもバンドルで落ちる形の壊れ方を
+        # デプロイ前に捕まえるため
         run: bun run check

@@ -11,13 +11,13 @@
 set -eu
 
 LABEL=dev.ries.zaimviewer.sync
-WORKER_DIR=$(cd "$(dirname "$0")/../worker" && pwd)
+REPO_DIR=$(cd "$(dirname "$0")/.." && pwd)
 BUN=$(command -v bun)
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG="$HOME/Library/Logs/$LABEL.log"
 
-if [ ! -f "$WORKER_DIR/.dev.vars" ]; then
-  echo "worker/.dev.vars がない。.dev.vars.example を参照して作る" >&2
+if [ ! -f "$REPO_DIR/.dev.vars" ]; then
+  echo ".dev.vars がない。.dev.vars.example を参照して作る" >&2
   exit 1
 fi
 
@@ -37,10 +37,10 @@ cat > "$PLIST" <<EOF
     <string>$BUN</string>
     <string>--env-file=.dev.vars</string>
     <string>run</string>
-    <string>scripts/sync.ts</string>
+    <string>worker/scripts/sync.ts</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>$WORKER_DIR</string>
+  <string>$REPO_DIR</string>
   <key>StartCalendarInterval</key>
   <dict>
     <key>Hour</key><integer>6</integer>
