@@ -57,6 +57,7 @@ CLAUDE.md には**結論**だけを置く。毎セッション自動で読み込
 | [0013](0013-voidzero-toolchain.md) | ツールチェーンを TypeScript 7 + oxlint + oxfmt にする（Vite+ 不採用） | 承認済み |
 | [0014](0014-drizzle-for-reads.md) | 読み取りは Drizzle、同期は素の SQL | 承認済み |
 | [0015](0015-sync-outside-worker.md) | 同期は Worker の外（手元の Mac mini）で実行する | 承認済み |
+| [0018](0018-d1-http-api-for-sync.md) | 同期は D1 の HTTP API を叩く自作ドライバから書き込む | 承認済み |
 
 ### 未決・進行中
 

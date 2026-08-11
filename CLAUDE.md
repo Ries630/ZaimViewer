@@ -24,20 +24,25 @@ CPU 時間とクエリ数の上限のため（「デプロイの前提」参照�
 
 ## 現在地（2026-08-11）
 
-**工程 ① 同期基盤: 完了。** Zaim 全件 4,362 件（payment 3,266 / income 607 /
-transfer 489、2014-02〜2029-12。未来分は繰り返し登録の家賃）をミラー済み。
-マスタは categories 46 / genres 129 / accounts 36。
+**工程 ① 同期基盤: 完了。** Zaim 全件 4,370 件（payment 3,272 / income 607 /
+transfer 491、2014-02〜2029-12。未来分は繰り返し登録の家賃）を本番 D1 にミラー済み。
+マスタは categories 46 / genres 129 / accounts 36。件数は同期のたびに増える。
 
 **工程 ② 読み取り API: 完了。** `GET /api/transactions`（フィルタ + ページング）、
 `/api/masters`（フィルタ UI の選択肢）、`/api/meta`（同期の鮮度）、
-`POST /api/sync`（手動同期）。実データでの確認済み: 全 4,362 件 → 振替除外 3,873
-→ 未来分を隠して 3,833 → 1,000 円未満のノイズ除外で 1,875 件。
+`POST /api/sync`（手動同期）。実データでの確認済み: 全 4,370 件 → 振替除外 3,879
+→ 未来分を隠して 3,839 → 1,000 円未満のノイズ除外で 1,881 件。
 
-なお `POST /api/sync` は**ローカル開発でしか使えない**。CPU 時間とクエリ数の
-上限（下記）に引っかかるため、本番の同期は手元から実行する別経路になる。
+なお `POST /api/sync` は**ローカル開発専用**で、本番では 404 を返す。CPU 時間と
+クエリ数の上限（下記）に引っかかるため、本番の同期は手元から実行する。
 
 **初回デプロイ: 完了。** https://zaimviewer.ries.workers.dev で読み取り API 3 本が
-応答する。D1 は `zaim-viewer`（APAC）。ミラーはまだ空なので、次は同期スクリプト。
+応答する。D1 は `zaim-viewer`（APAC）。Cloudflare Access で保護済み。
+
+**同期スクリプト: 完了。** `worker/scripts/sync.ts` を手元から実行して本番 D1 を
+更新する。書き込みは D1 の HTTP API 経由（[ADR-0018](docs/adr/0018-d1-http-api-for-sync.md)）で、
+同期処理そのものは Worker と同じ `src/sync.ts`。実測 22 秒で全件差し替わる。
+定期実行は launchd（毎日 06:00）。手順は [`ops/README.md`](ops/README.md)。
 
 **工程 ② PWA: 次はここから。** React + Vite + TypeScript + Tailwind CSS v4。
 明細一覧（無限スクロール）とフィルタパネル。モバイルファースト。
@@ -81,13 +86,12 @@ CPU 時間（10ms に対し実測 20ms）と D1 の invocation あたりクエ�
 読み取り API は 1 リクエストあたり 2〜3 クエリなので無料枠で足りる。月額 0 円で、
 Mac mini がスリープ中でも閲覧できる（ミラーが古くなるだけ）。
 アトミック差し替えもこの構成で維持できる（原子性が要るのは差し替えの 13 文だけ）。
+書き込みは D1 の HTTP API で、バッチが 1 トランザクションになることは本番で確認済み
+→ [ADR-0018](docs/adr/0018-d1-http-api-for-sync.md)
 
 **未検証: Cloudflare Access の挙動。** ホーム画面から起動した PWA でセッションが
-切れたときの再認証は、実際にデプロイしないと分からない。セッション期間は最長 1 か月
+切れたときの再認証は、PWA ができるまで分からない。セッション期間は最長 1 か月
 → [ADR-0016](docs/adr/0016-cloudflare-access.md)（提案のまま）
-
-**現状は workers.dev が無認証で公開されている。** ミラーが空のうちは出る情報が
-無いので許容しているだけで、同期スクリプトを回す前に Access を入れること。
 
 ## 設計上の決定
 
@@ -109,6 +113,7 @@ Mac mini がスリープ中でも閲覧できる（ミラーが古くなるだ�
 | 読み取りは Drizzle、同期は素の SQL | [0014](docs/adr/0014-drizzle-for-reads.md) |
 | 同期は Worker の外で実行する | [0015](docs/adr/0015-sync-outside-worker.md) |
 | 設計判断は ADR として残す | [0017](docs/adr/0017-adr-in-repo.md) |
+| 同期の書き込みは D1 の HTTP API を叩く自作ドライバ（`worker/src/d1-http.ts`） | [0018](docs/adr/0018-d1-http-api-for-sync.md) |
 
 以下はコードとテストが守っているもので、ADR にはしていない。
 
@@ -142,6 +147,7 @@ DDL と差し替え処理をそのまま使うので、スキーマの写しは�
 cd worker
 bun install
 bun run dev         # ローカル D1 で :8787 に起動
+bun run sync        # 本番 D1 を Zaim から全件更新（手元で実行する同期）
 bun run check       # format:check → lint → typecheck → test を一括
 bun run test        # workerd 上で実行（D1 も実物を使う）
 bun run lint        # oxlint（型認識ルール込み）
@@ -159,27 +165,29 @@ bunx wrangler tail  # デプロイ後のリクエストログ
 lint は `--type-aware` で動かしており、型情報を要するルール（`no-floating-promises`
 など）も効く。これは `oxlint-tsgolint` が入っていることが前提。
 
+**型検査は 2 プログラムに分かれている。** `scripts/` は Worker ではなく Bun で
+走るため `tsconfig.scripts.json` で別に検査する。Workers と Bun の型を同じ
+プログラムに混ぜると `fetch` などの宣言が衝突するため。`bun run typecheck` は両方走る。
+
 同期はローカルでは `curl -X POST http://127.0.0.1:8787/api/sync`（約 17 秒、44 リクエスト）。
+本番向けは `bun run sync`（約 22 秒）。運用手順は [`ops/README.md`](ops/README.md)。
 
 CI は GitHub Actions（`.github/workflows/ci.yml`）で、PR と main への push に
 `bun run check` を実行する。Zaim の認証情報も Cloudflare へのログインも要らない。
 
-`worker/.dev.vars` に Zaim の OAuth1.0a 認証情報が必要（`worker/.dev.vars.example` 参照）。
-値は `~/.claude.json` の `mcpServers.zaim-api` に設定済みのものと同一。
-本番へは `wrangler secret put` で入れる。
+`worker/.dev.vars` に Zaim の OAuth1.0a 認証情報と、同期スクリプト用の
+Cloudflare の認証情報（`Account > D1 > Edit` のトークン）が必要
+（`worker/.dev.vars.example` 参照）。Zaim 側の値は `~/.claude.json` の
+`mcpServers.zaim-api` に設定済みのものと同一。本番 Worker へは
+`wrangler secret put` で入れるが、工程 ③ まではその必要が無い。
 
 ## 残っている作業
 
-1. Cloudflare Access の設定と、PWA でのセッション挙動の確認。**同期より先に置く**
-   のは、workers.dev が今は無認証で公開されているため。認証は Google、セッションは
-   1 か月。カスタムドメインは要らない（workers.dev をワンクリックで保護できる）
-2. Access の JWT（`Cf-Access-Jwt-Assertion`）を Worker 側でも検証する。エッジの
+1. Access の JWT（`Cf-Access-Jwt-Assertion`）を Worker 側でも検証する。エッジの
    判定だけに頼ると、設定ミスや Preview URL の漏れが静かな素通りになる
-3. 同期スクリプト（手元で実行し、D1 の HTTP API 越しに書く）。あわせて本番 D1 での
-   `batch()` 失敗時ロールバックを確認する（ローカルの miniflare では確認済み）
-4. PWA（React + Vite + `@cloudflare/vite-plugin`）と、`wrangler.jsonc` の
-   Static Assets 設定
-5. 工程 ③ の編集プロキシ（`ZaimClient` に更新系メソッドを足すところから）。
+2. PWA（React + Vite + `@cloudflare/vite-plugin`）と、`wrangler.jsonc` の
+   Static Assets 設定。ホーム画面から起動したときの Access 再認証の確認もここで
+3. 工程 ③ の編集プロキシ（`ZaimClient` に更新系メソッドを足すところから）。
    `wrangler secret put` で Zaim の認証情報を入れるのもここ。同期を Worker の外へ
    出したので、それまで本番に認証情報は要らない
 
@@ -188,6 +196,7 @@ CI は GitHub Actions（`.github/workflows/ci.yml`）で、PR と main への pu
 - Grafana（Mac mini の :3080）からミラーを読む構想があったが、D1 へ移したため
   そのままでは繋がらない。集計・推移が必要になったら、Worker 側に集計エンドポイントを
   足すか、Grafana の JSON データソースを使う
+- 同期の定期実行は launchd（毎日 06:00）。登録・ログ・解除は [`ops/README.md`](ops/README.md)
 - コミットは Conventional Commits、本文は日本語
 - 旧 Python 実装は完全に削除済み。`src/zaimviewer/`、`tests/`、`.venv`、
   `data/zaim.db`、`__pycache__` のいずれも手元に残っていない

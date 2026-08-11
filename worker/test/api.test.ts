@@ -81,3 +81,16 @@ it("同期メタ情報が取得できる", async () => {
   expect(body.synced_at).toBe(SYNCED_AT);
   expect(body.counts.transactions).toBe(TRANSACTION_COUNT);
 });
+
+it("本番では POST /api/sync が閉じている", async () => {
+  // 同期は Worker 内では上限に収まらず、手元の scripts/sync.ts が正（ADR-0015）。
+  // .dev.vars の有無で既定値が変わるため、ここでは明示的に上書きして固定する
+  const original = env.ENVIRONMENT;
+  env.ENVIRONMENT = "production";
+  try {
+    const res = await SELF.fetch(url("/api/sync"), { method: "POST" });
+    expect(res.status).toBe(404);
+  } finally {
+    env.ENVIRONMENT = original;
+  }
+});

@@ -11,5 +11,7 @@
     "skipLibCheck": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts", "vitest.config.ts"]
+  // scripts/ は Bun で走るので tsconfig.scripts.json 側で検査する。
+  // Workers と Bun の型を同じプログラムに混ぜると fetch などの宣言が衝突する
+  "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts"]
 }
