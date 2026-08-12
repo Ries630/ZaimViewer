@@ -57,8 +57,9 @@ Access セッション切れの検出は `src/api/` にある。**リポジト�
 [ADR-0021](docs/adr/0021-no-list-virtualization.md)）。
 残りはフィルタ（[#15](https://github.com/Ries630/ZaimViewer/issues/15)）と
 PWA 化・実機確認（[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。
-**表示はライトに固定してある**（`src/index.css` の `color-scheme`）。
-ダークモードはまだ入れていない（[ADR-0022](docs/adr/0022-daisyui-for-form-components.md)）。
+**色はすべて DaisyUI の semantic トークンで書く。** 有効なテーマは `light` だけで、
+パレット直書き（`text-gray-500`）はテーマから外れるので使わない
+（[ADR-0022](docs/adr/0022-daisyui-for-form-components.md)）。ダークモードはまだ入れていない。
 
 **工程 ③ 編集機能: 未着手。** 単体編集 → フィルタ結果への一括編集。
 いずれも Zaim 更新 API へ順次反映する。署名側は POST + フォームボディまで
@@ -248,18 +249,12 @@ Cloudflare の認証情報（`Account > D1 > Edit` のトークン）が必要
 
 ## 残っている作業
 
-1. DaisyUI の導入（[ADR-0022](docs/adr/0022-daisyui-for-form-components.md)）。
-   依存の追加と、既存 22 箇所のパレット直書きを semantic トークンへ置き換える。
-   色の値は組み込み `light` の既定のままにする（後から CSS 8 行で変えられる）。
-   判断が要る 2 箇所も semantic に寄せる: 収入の `text-emerald-700` は
-   `text-success`、「予定」バッジの `bg-sky-100` / `text-sky-700` は
-   `badge badge-info`。比較モックは捨てブランチごと削除済みで、
-   フォーム部品は daisyUI skill を使って書き直す
-2. フィルタパネル（[#15](https://github.com/Ries630/ZaimViewer/issues/15)）
-3. PWA 化と、ホーム画面から起動したときの Access 再認証の実機確認
+1. フィルタパネル（[#15](https://github.com/Ries630/ZaimViewer/issues/15)）。
+   フォーム部品は daisyUI skill を使って書く
+2. PWA 化と、ホーム画面から起動したときの Access 再認証の実機確認
    （[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。ADR-0016 を
    「承認済み」にできるのはここ
-4. 工程 ③ の編集プロキシ（`ZaimClient` に更新系メソッドを足すところから）。
+3. 工程 ③ の編集プロキシ（`ZaimClient` に更新系メソッドを足すところから）。
    `wrangler secret put` で Zaim の認証情報を入れるのもここ。同期を Worker の外へ
    出したので、それまで本番に認証情報は要らない
 

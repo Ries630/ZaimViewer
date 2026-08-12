@@ -31,7 +31,7 @@ interface SyncFreshnessProps {
  */
 export function SyncFreshness({ syncedAt, now }: SyncFreshnessProps) {
   if (!syncedAt) {
-    return <span className="text-sm text-gray-500">未同期</span>;
+    return <span className="text-sm text-base-content/60">未同期</span>;
   }
 
   const stale = isStale(syncedAt, now);
@@ -45,8 +45,10 @@ export function SyncFreshness({ syncedAt, now }: SyncFreshnessProps) {
         // ホバーのある環境向け。iOS Safari はタップで title を出さないので、
         // これだけに頼ると絶対時刻に到達する手段が無くなる
         title={absolute}
+        // 古いときだけ地色を敷く。warning と warning-content の組はどのテーマでも
+        // 読める前提で用意されているので、対比を自前で調整しなくてよい
         className={`freshness-anchor shrink-0 rounded px-2 py-1 text-sm ${
-          stale ? "bg-amber-100 font-medium text-amber-800" : "text-gray-500"
+          stale ? "bg-warning font-medium text-warning-content" : "text-base-content/60"
         }`}
       >
         <time dateTime={syncedAt}>{formatRelativeTime(syncedAt, now)}</time>
@@ -56,7 +58,7 @@ export function SyncFreshness({ syncedAt, now }: SyncFreshnessProps) {
       <div
         id={POPOVER_ID}
         popover="auto"
-        className="freshness-popover rounded-lg bg-gray-900 px-3 py-2 text-sm text-white shadow-lg"
+        className="freshness-popover rounded-lg bg-neutral px-3 py-2 text-sm text-neutral-content shadow-lg"
       >
         {absolute} 時点のミラー
       </div>

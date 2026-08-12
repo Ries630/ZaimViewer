@@ -38,6 +38,7 @@
     "@vitejs/plugin-react": "^6.0.5",
     "@vitest/runner": "^4.1.0",
     "@vitest/snapshot": "^4.1.0",
+    "daisyui": "^5.7.16",
     "oxfmt": "^0.62.0",
     "oxlint": "^1.77.0",
     "oxlint-tsgolint": "^7.0.2001",
