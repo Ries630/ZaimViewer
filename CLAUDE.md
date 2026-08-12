@@ -250,7 +250,11 @@ Cloudflare の認証情報（`Account > D1 > Edit` のトークン）が必要
 
 1. DaisyUI の導入（[ADR-0022](docs/adr/0022-daisyui-for-form-components.md)）。
    依存の追加と、既存 22 箇所のパレット直書きを semantic トークンへ置き換える。
-   色の値は組み込み `light` の既定のままにする（後から CSS 8 行で変えられる）
+   色の値は組み込み `light` の既定のままにする（後から CSS 8 行で変えられる）。
+   判断が要る 2 箇所も semantic に寄せる: 収入の `text-emerald-700` は
+   `text-success`、「予定」バッジの `bg-sky-100` / `text-sky-700` は
+   `badge badge-info`。比較モックは捨てブランチごと削除済みで、
+   フォーム部品は daisyUI skill を使って書き直す
 2. フィルタパネル（[#15](https://github.com/Ries630/ZaimViewer/issues/15)）
 3. PWA 化と、ホーム画面から起動したときの Access 再認証の実機確認
    （[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。ADR-0016 を
