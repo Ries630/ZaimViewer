@@ -60,6 +60,7 @@ CLAUDE.md には**結論**だけを置く。毎セッション自動で読み込
 | [0018](0018-d1-http-api-for-sync.md) | 同期は D1 の HTTP API を叩く自作ドライバから書き込む | 承認済み |
 | [0019](0019-verify-access-jwt-in-worker.md) | Access の JWT を Worker 自身でも検証する | 承認済み |
 | [0020](0020-single-package-vite-worker.md) | PWA と Worker を 1 パッケージに同居させ、ルートをアプリのルートにする | 承認済み |
+| [0021](0021-no-list-virtualization.md) | 明細一覧を仮想化せず、取得済みの全件を素の DOM で描く | 承認済み |
 
 ### 未決・進行中
 

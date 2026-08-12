@@ -6,3 +6,53 @@
   --spacing-safe-top: env(safe-area-inset-top);
   --spacing-safe-bottom: env(safe-area-inset-bottom);
 }
+
+/* ライトに固定する。
+   背景色を宣言しないと、端末がダークモードのとき UA のキャンバスが黒くなる。
+   ヘッダだけ bg-white を持っているので上帯だけ白く残り、本文は黒地に
+   text-gray-900 の金額が乗って読めなくなる（実機で踏んだ）。
+   ダークモードそのものは DaisyUI の採否を決めてから入れる。素の Tailwind で
+   dark: を全コンポーネントに撒くと、テーマ機構に載せ替えるとき無駄になるため */
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  body {
+    background-color: var(--color-white);
+    color: var(--color-gray-900);
+  }
+}
+
+/* popover の UA 標準の枠線・余白・背景を落とす。
+   @layer base に入れるのが肝で、レイヤの外に書くと Tailwind の
+   ユーティリティ（bg-* / p-*）より強くなり、popover にだけ色も余白も
+   当たらなくなる（レイヤ付きの宣言は、レイヤ無しの宣言に必ず負ける） */
+@layer base {
+  [popover] {
+    margin: 0;
+    border: none;
+    padding: 0;
+    background: transparent;
+  }
+}
+
+/* popover は top layer に出るため、親を基準にした position: absolute では
+   起動ボタンに紐付かない。真下に出すには CSS anchor positioning が要る
+   （iOS 26 / Chrome 125 以降） */
+
+@supports (position-anchor: --probe) {
+  .freshness-anchor {
+    anchor-name: --freshness;
+  }
+
+  /* 対応していない環境では画面中央に出る。位置が間抜けなだけで、
+     絶対時刻には到達できる */
+  .freshness-popover {
+    position: fixed;
+    position-anchor: --freshness;
+    position-area: block-end span-inline-start;
+    inset: auto;
+    margin-block-start: 0.25rem;
+  }
+}
