@@ -58,7 +58,7 @@ Access セッション切れの検出は `src/api/` にある。**リポジト�
 残りはフィルタ（[#15](https://github.com/Ries630/ZaimViewer/issues/15)）と
 PWA 化・実機確認（[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。
 **表示はライトに固定してある**（`src/index.css` の `color-scheme`）。
-ダークモードは DaisyUI の採否を決めてから入れる。
+ダークモードはまだ入れていない（[ADR-0022](docs/adr/0022-daisyui-for-form-components.md)）。
 
 **工程 ③ 編集機能: 未着手。** 単体編集 → フィルタ結果への一括編集。
 いずれも Zaim 更新 API へ順次反映する。署名側は POST + フォームボディまで
@@ -79,6 +79,7 @@ PWA 化・実機確認（[#16](https://github.com/Ries630/ZaimViewer/issues/16)�
 | パッケージ管理 | bun | peer dependency の解決が緩いので、更新時は要注意 |
 | PWA | React + Vite + `@cloudflare/vite-plugin` | Worker と単一の dev サーバで動き、同一オリジンで API を叩ける |
 | スタイル | Tailwind CSS v4（`@tailwindcss/vite`） | 設定ファイルを持たず CSS 側で完結する |
+| UI 部品 | DaisyUI 5 | #15 のフォーム部品。CSS 側の `@plugin` だけで載る |
 | データ取得 | TanStack Query | `useInfiniteQuery` が無限スクロールに、キャッシュがフィルタ切り替えに効く |
 
 **不採用にしたもの。** 理由と再評価のサインは各 ADR にある。
@@ -142,6 +143,7 @@ AUD を両方許す。本番で設定が欠けていれば全リクエストが 
 | Access の JWT を Worker 自身でも検証する。設定は `vars`、本番・Preview 両方の AUD を許す | [0019](docs/adr/0019-verify-access-jwt-in-worker.md) |
 | PWA と Worker を 1 パッケージに同居させ、リポジトリルートをアプリのルートにする。静的アセットは Worker を通さない | [0020](docs/adr/0020-single-package-vite-worker.md) |
 | 明細一覧を仮想化せず、取得済みの全件を素の DOM で描く | [0021](docs/adr/0021-no-list-virtualization.md) |
+| DaisyUI を採用する。色は semantic トークンで書き、パレット直書き（`text-gray-500`）は使わない | [0022](docs/adr/0022-daisyui-for-form-components.md) |
 
 以下はコードとテストが守っているもので、ADR にはしていない。
 
@@ -246,9 +248,9 @@ Cloudflare の認証情報（`Account > D1 > Edit` のトークン）が必要
 
 ## 残っている作業
 
-1. DaisyUI を採用するかの判断。#14 の実物と、DaisyUI を当てた捨てブランチを
-   見比べて決める。フィルタパネルのフォーム部品が本命なので、捨てブランチには
-   #15 の見た目のモックも置く。決めたら ADR（採用でも不採用でも）
+1. DaisyUI の導入（[ADR-0022](docs/adr/0022-daisyui-for-form-components.md)）。
+   依存の追加と、既存 22 箇所のパレット直書きを semantic トークンへ置き換える。
+   色の値は組み込み `light` の既定のままにする（後から CSS 8 行で変えられる）
 2. フィルタパネル（[#15](https://github.com/Ries630/ZaimViewer/issues/15)）
 3. PWA 化と、ホーム画面から起動したときの Access 再認証の実機確認
    （[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。ADR-0016 を
