@@ -62,6 +62,7 @@ CLAUDE.md には**結論**だけを置く。毎セッション自動で読み込
 | [0020](0020-single-package-vite-worker.md) | PWA と Worker を 1 パッケージに同居させ、ルートをアプリのルートにする | 承認済み |
 | [0021](0021-no-list-virtualization.md) | 明細一覧を仮想化せず、取得済みの全件を素の DOM で描く | 承認済み |
 | [0022](0022-daisyui-for-form-components.md) | DaisyUI を採用し、色は semantic トークンで書く | 承認済み |
+| [0023](0023-darken-success-for-income-amount.md) | 収入の金額のため、`light` テーマの success だけ値を上書きする | 承認済み |
 
 ### 未決・進行中
 

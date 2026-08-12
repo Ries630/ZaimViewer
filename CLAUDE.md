@@ -145,6 +145,7 @@ AUD を両方許す。本番で設定が欠けていれば全リクエストが 
 | PWA と Worker を 1 パッケージに同居させ、リポジトリルートをアプリのルートにする。静的アセットは Worker を通さない | [0020](docs/adr/0020-single-package-vite-worker.md) |
 | 明細一覧を仮想化せず、取得済みの全件を素の DOM で描く | [0021](docs/adr/0021-no-list-virtualization.md) |
 | DaisyUI を採用する。色は semantic トークンで書き、パレット直書き（`text-gray-500`）は使わない | [0022](docs/adr/0022-daisyui-for-form-components.md) |
+| 収入の金額が白地で読めるよう、`light` テーマの `success` だけ値を上書きする。他の色は組み込みの既定のまま | [0023](docs/adr/0023-darken-success-for-income-amount.md) |
 
 以下はコードとテストが守っているもので、ADR にはしていない。
 

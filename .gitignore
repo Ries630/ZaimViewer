@@ -13,3 +13,8 @@ dist/
 worker-configuration.d.ts
 # db:init が sync.ts の DDL から生成する。スキーマの正は sync.ts 側
 .schema.sql
+
+# Playwright MCP の書き出し（スナップショットとコンソールログ）。
+# スクリーンショットは既定でリポジトリ直下に落ちるので、
+# 保存先も .playwright-mcp/ の下を指定する
+.playwright-mcp/
