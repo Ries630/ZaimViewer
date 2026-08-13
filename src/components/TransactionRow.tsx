@@ -8,12 +8,12 @@ import { rowText } from "../lib/transaction";
 
 /** モードごとの金額の見せ方。 */
 const AMOUNT_STYLES: Record<string, { className: string; prefix: string }> = {
-  income: { className: "text-emerald-700", prefix: "+" },
-  transfer: { className: "text-gray-500", prefix: "" },
+  income: { className: "text-success", prefix: "+" },
+  transfer: { className: "text-base-content/60", prefix: "" },
 };
 
 /** 支出および未知のモードの見せ方。 */
-const DEFAULT_AMOUNT_STYLE = { className: "text-gray-900", prefix: "" };
+const DEFAULT_AMOUNT_STYLE = { className: "text-base-content", prefix: "" };
 
 interface TransactionRowProps {
   /** 表示する明細。 */
@@ -43,13 +43,11 @@ export function TransactionRow({ transaction, today }: TransactionRowProps) {
           {isFutureDate(transaction.date, today) && (
             // 繰り返し登録の家賃が 2029-12 まで入っており、フィルタの無い
             // #14 では一覧の先頭がそれで埋まる。壊れたデータに見えないよう印を付ける
-            <span className="ml-1.5 rounded bg-sky-100 px-1.5 py-0.5 align-middle text-xs text-sky-700">
-              予定
-            </span>
+            <span className="badge badge-info badge-sm ml-1.5">予定</span>
           )}
         </p>
-        {context && <p className="truncate text-xs text-gray-500">{context}</p>}
-        {note && <p className="truncate text-xs text-gray-400">{note}</p>}
+        {context && <p className="truncate text-xs text-base-content/60">{context}</p>}
+        {note && <p className="truncate text-xs text-base-content/50">{note}</p>}
       </div>
       <p className={`shrink-0 tabular-nums ${style.className}`}>
         {style.prefix}

@@ -44,16 +44,17 @@ export function TransactionList({
   onLoadMore,
 }: TransactionListProps) {
   if (error) {
-    return <p className="py-8 text-center text-red-600">読み込めなかった: {error.message}</p>;
+    return <p className="py-8 text-center text-error">読み込めなかった: {error.message}</p>;
   }
 
   if (isPending) {
     return (
-      <div className="animate-pulse" aria-busy="true" aria-label="読み込み中">
+      // skeleton は自前で背景色とアニメーションを持つので animate-pulse は要らない
+      <div aria-busy="true" aria-label="読み込み中">
         {Array.from({ length: SKELETON_ROWS }, (_, index) => (
-          <div key={index} className="flex justify-between gap-3 border-b border-gray-100 py-4">
-            <div className="h-4 w-2/5 rounded bg-gray-200" />
-            <div className="h-4 w-20 rounded bg-gray-200" />
+          <div key={index} className="flex justify-between gap-3 border-b border-base-200 py-4">
+            <div className="skeleton h-4 w-2/5" />
+            <div className="skeleton h-4 w-20" />
           </div>
         ))}
       </div>
@@ -61,17 +62,17 @@ export function TransactionList({
   }
 
   if (items.length === 0) {
-    return <p className="py-8 text-center text-gray-500">該当する明細が無い</p>;
+    return <p className="py-8 text-center text-base-content/60">該当する明細が無い</p>;
   }
 
   return (
     <>
       {groupByDate(items).map((group) => (
         <section key={group.date}>
-          <h2 className="pt-4 pb-1 text-xs font-medium text-gray-500">
+          <h2 className="pt-4 pb-1 text-xs font-medium text-base-content/60">
             {formatDateHeading(group.date)}
           </h2>
-          <ol className="divide-y divide-gray-100">
+          <ol className="divide-y divide-base-200">
             {group.items.map((transaction) => (
               <li key={transaction.id}>
                 <TransactionRow transaction={transaction} today={today} />
@@ -83,7 +84,7 @@ export function TransactionList({
 
       {hasNextPage && <Sentinel onVisible={onLoadMore} />}
 
-      <p className="py-6 text-center text-sm text-gray-500">
+      <p className="py-6 text-center text-sm text-base-content/60">
         {isFetchingNextPage ? "読み込み中…" : hasNextPage ? "" : "ここまで"}
       </p>
     </>

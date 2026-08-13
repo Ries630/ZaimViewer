@@ -1,27 +1,31 @@
 @import "tailwindcss";
 
+/* 有効にするテーマは light だけ。DaisyUI が :root に color-scheme: light と
+   base-100 / base-content を当てるので、端末がダークモードでも UA のキャンバスは
+   黒くならない（以前はそのために body の背景色を自前で宣言していた）。
+   色の値は組み込み light の既定のままで、ダークモードの扱いは ADR-0022 に譲る */
+@plugin "daisyui" {
+  themes: light --default;
+}
+
+/* 組み込み light の success は明るい緑（oklch(76%)）で、白地に文字として乗せると
+   コントラスト 1.96:1 になり収入の金額が読めない。地色として使う前提の値なので、
+   文字として使える濃さまで落とす。5.05:1 で、置き換え前の emerald-700（5.36:1）と
+   ほぼ同じ濃さになる。success-content も対で明るくしておく（暗くした success を
+   地色に使う箇所が出たとき、暗い緑に暗い緑が乗るのを避けるため）。
+   他の値は組み込み light から継承する */
+@plugin "daisyui/theme" {
+  name: "light";
+  default: true;
+  --color-success: oklch(52% 0.13 163.223);
+  --color-success-content: oklch(98% 0.014 163.223);
+}
+
 /* iPhone のホーム画面から standalone で起動したときに、
    ノッチとホームインジケータの領域を避ける */
 @theme {
   --spacing-safe-top: env(safe-area-inset-top);
   --spacing-safe-bottom: env(safe-area-inset-bottom);
-}
-
-/* ライトに固定する。
-   背景色を宣言しないと、端末がダークモードのとき UA のキャンバスが黒くなる。
-   ヘッダだけ bg-white を持っているので上帯だけ白く残り、本文は黒地に
-   text-gray-900 の金額が乗って読めなくなる（実機で踏んだ）。
-   ダークモードそのものは DaisyUI の採否を決めてから入れる。素の Tailwind で
-   dark: を全コンポーネントに撒くと、テーマ機構に載せ替えるとき無駄になるため */
-@layer base {
-  :root {
-    color-scheme: light;
-  }
-
-  body {
-    background-color: var(--color-white);
-    color: var(--color-gray-900);
-  }
 }
 
 /* popover の UA 標準の枠線・余白・背景を落とす。

@@ -32,9 +32,9 @@ export function SummaryBar({ total, totalAmount }: SummaryBarProps) {
       <p>
         <span className="font-medium tabular-nums">{formatCount(total)}</span> 件
       </p>
-      <p className="text-gray-600">
+      <p className="text-base-content/70">
         総額 <span className="tabular-nums">{formatAmount(totalAmount, "JPY")}</span>
-        <span className="ml-1 text-xs text-gray-400">全モード合算</span>
+        <span className="ml-1 text-xs text-base-content/50">全モード合算</span>
       </p>
     </div>
   );

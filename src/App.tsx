@@ -45,7 +45,7 @@ export function App() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <header className="sticky top-0 z-10 border-b border-gray-200 bg-white px-4 pt-safe-top">
+      <header className="sticky top-0 z-10 border-b border-base-300 bg-base-100 px-4 pt-safe-top">
         <div className="flex items-baseline justify-between gap-2 pt-3">
           <h1 className="text-lg font-bold">ZaimViewer</h1>
           <SyncFreshness syncedAt={meta.data?.synced_at ?? null} now={now} />
