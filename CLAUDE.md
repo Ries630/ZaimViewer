@@ -44,19 +44,23 @@ transfer 491、2014-02〜2029-12。未来分は繰り返し登録の家賃）を
 同期処理そのものは Worker と同じ `src/sync.ts`。実測 22 秒で全件差し替わる。
 定期実行は launchd（毎日 06:00）。手順は [`ops/README.md`](ops/README.md)。
 
-**工程 ② PWA: 明細一覧まで完了。** React 19 + Vite 8 + TypeScript + Tailwind CSS v4 +
+**工程 ② PWA: 一覧とフィルタまで完了。** React 19 + Vite 8 + TypeScript + Tailwind CSS v4 +
 TanStack Query。`@cloudflare/vite-plugin` で Worker と単一の dev サーバ（:5173）で動き、
 ビルド成果物は Static Assets として同じ Worker から配信される。RPC クライアントと
 Access セッション切れの検出は `src/api/` にある。**リポジトリルートがアプリのルート**で、
 `src/` がクライアント、`worker/src/` が Worker（[ADR-0020](docs/adr/0020-single-package-vite-worker.md)）。
 
 明細一覧は `useInfiniteQuery` + `IntersectionObserver` の無限スクロール
-（[#14](https://github.com/Ries630/ZaimViewer/issues/14)）。フィルタがまだ無いので
-全 4,370 件が対象で、先頭には繰り返し登録の家賃（2029-12 まで）が並ぶ。
+（[#14](https://github.com/Ries630/ZaimViewer/issues/14)）。
 **一覧は仮想化していない**（測定値と再評価のサインは
 [ADR-0021](docs/adr/0021-no-list-virtualization.md)）。
-残りはフィルタ（[#15](https://github.com/Ries630/ZaimViewer/issues/15)）と
-PWA 化・実機確認（[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。
+
+フィルタは「ヘッダ常設 + ボトムシート」（[#15](https://github.com/Ries630/ZaimViewer/issues/15)）。
+**既定は振替除外 + 未来を隠す + 1,000 円未満を除外の 3 段**で、初期表示は 4,370 件中
+1,881 件から始まる。状態は localStorage に永続化し、URL とは同期しない
+（[ADR-0026](docs/adr/0026-filter-defaults-and-persistence.md)）。
+残りは PWA 化・実機確認（[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。
+
 **色はすべて DaisyUI の semantic トークンで書く。** パレット直書き（`text-gray-500`）は
 テーマから外れるので使わない（[ADR-0022](docs/adr/0022-daisyui-for-form-components.md)）。
 テーマは端末の設定に従う（[ADR-0024](docs/adr/0024-dark-mode-follows-device.md)）。
@@ -82,6 +86,7 @@ PWA 化・実機確認（[#16](https://github.com/Ries630/ZaimViewer/issues/16)�
 | スタイル | Tailwind CSS v4（`@tailwindcss/vite`） | 設定ファイルを持たず CSS 側で完結する |
 | UI 部品 | DaisyUI 5 | #15 のフォーム部品。CSS 側の `@plugin` だけで載る |
 | データ取得 | TanStack Query | `useInfiniteQuery` が無限スクロールに、キャッシュがフィルタ切り替えに効く |
+| 日付演算 | `temporal-polyfill` | 相対期間（過去 3 か月）が月末で壊れない。整形は `Intl` のまま |
 
 **不採用にしたもの。** 理由と再評価のサインは各 ADR にある。
 
@@ -147,6 +152,8 @@ AUD を両方許す。本番で設定が欠けていれば全リクエストが 
 | DaisyUI を採用する。色は semantic トークンで書き、パレット直書き（`text-gray-500`）は使わない | [0022](docs/adr/0022-daisyui-for-form-components.md) |
 | 収入の金額が白地で読めるよう、`light` テーマの `success` だけ値を上書きする。他の色は組み込みの既定のまま | [0023](docs/adr/0023-darken-success-for-income-amount.md) |
 | ダークモードは端末の設定に従う。色の上書きは `light` 側だけに閉じ、テーマ切り替え UI は持たない | [0024](docs/adr/0024-dark-mode-follows-device.md) |
+| 日付演算にだけ Temporal を使い、適用範囲を `src/lib/period.ts` に閉じる。表示の整形は `Intl` のまま | [0025](docs/adr/0025-temporal-for-date-arithmetic.md) |
+| フィルタの既定値（3 段）と保存先は PWA が持つ。localStorage に永続化し、URL とは同期しない | [0026](docs/adr/0026-filter-defaults-and-persistence.md) |
 
 以下はコードとテストが守っているもので、ADR にはしていない。
 
@@ -161,6 +168,10 @@ RPC の型が `typeof app` に積み上がらず、PWA の `hc<AppType>` から�
 50 バイトに制限している（標準の SQLite ビルドは 50,000 なのでローカルでは踏めない）。
 前後に `%` が付くぶんを引いて 48 バイト。日本語だけなら 16 文字が上限になる。
 本番 D1 で確認済み（50 バイトは通り、51 バイトで `SQLITE_ERROR [code: 7500]`）。
+**この値の正は `worker/src/limits.ts` の 1 か所**で、Worker（400 を返す判定）と
+クライアント（入力欄でそれより前に気付かせる）の両方がそこから import する。
+依存を持たない別モジュールにしてあるのが肝で、`index.ts` に置いたまま値として
+import するとクライアントのバンドルに Worker 本体が入る。
 
 **スキーマ定義は 2 か所にあり、テストで守る。** テーブルの実体は `sync.ts` の
 DDL が作り、読み取りの型付けは `schema.ts` が担う。片方だけ変更すると
@@ -186,6 +197,13 @@ DDL と差し替え処理をそのまま使うので、スキーマの写しは�
 載せる場合も、その層は `TransactionFilter` を組み立てるだけでよく SQL を書かずに済む。
 プリセットを今作らないのは、どのノイズを消したいかが実データを触りながら
 決まる段階で、固まっていないルールを設定ファイルに固定したくないため。
+
+**クライアント側は `FilterState`（画面の状態）と `TransactionFilter`（API の引数）を
+別の型で持つ。** 両者は 1 対 1 でなく、たとえば「未来を隠す」は API に無い概念で、
+`date_to` を今日に丸める操作として畳み込まれる。変換は `src/lib/filter.ts` の
+`toTransactionFilter`。選択肢の従属関係（種別 → カテゴリ → ジャンル）を保つのは
+`src/lib/masters.ts` の `reconcile` で、**状態の更新は必ずこれを通す**。
+通さないと、画面に出ていない選択が条件として効き続けて件数が合わなくなる。
 
 ## 開発
 
@@ -251,11 +269,11 @@ Cloudflare の認証情報（`Account > D1 > Edit` のトークン）が必要
 
 ## 残っている作業
 
-1. フィルタパネル（[#15](https://github.com/Ries630/ZaimViewer/issues/15)）。
-   フォーム部品は daisyUI skill を使って書く
-2. PWA 化と、ホーム画面から起動したときの Access 再認証の実機確認
+1. PWA 化と、ホーム画面から起動したときの Access 再認証の実機確認
    （[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。ADR-0016 を
    「承認済み」にできるのはここ
+2. 明細の主表示が長いときに全文を読む手段
+   （[#19](https://github.com/Ries630/ZaimViewer/issues/19)）
 3. 工程 ③ の編集プロキシ（`ZaimClient` に更新系メソッドを足すところから）。
    `wrangler secret put` で Zaim の認証情報を入れるのもここ。同期を Worker の外へ
    出したので、それまで本番に認証情報は要らない

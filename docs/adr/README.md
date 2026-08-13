@@ -64,6 +64,8 @@ CLAUDE.md には**結論**だけを置く。毎セッション自動で読み込
 | [0022](0022-daisyui-for-form-components.md) | DaisyUI を採用し、色は semantic トークンで書く | 承認済み |
 | [0023](0023-darken-success-for-income-amount.md) | 収入の金額のため、`light` テーマの success だけ値を上書きする | 承認済み |
 | [0024](0024-dark-mode-follows-device.md) | ダークモードは端末の設定に従い、色の上書きは `light` 側だけに閉じる | 承認済み |
+| [0025](0025-temporal-for-date-arithmetic.md) | 日付演算に Temporal を使い、表示の整形は `Intl` のまま残す | 承認済み |
+| [0026](0026-filter-defaults-and-persistence.md) | フィルタの既定値と保存先を PWA が持ち、localStorage に永続化する | 承認済み |
 
 ### 未決・進行中
 
