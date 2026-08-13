@@ -1,24 +1,35 @@
 @import "tailwindcss";
 
-/* 有効にするテーマは light だけ。DaisyUI が :root に color-scheme: light と
-   base-100 / base-content を当てるので、端末がダークモードでも UA のキャンバスは
-   黒くならない（以前はそのために body の背景色を自前で宣言していた）。
-   色の値は組み込み light の既定のままで、ダークモードの扱いは ADR-0022 に譲る */
+/* 文書を走査対象から外す。Tailwind は既定でリポジトリ全体を見るので、ADR や
+   CLAUDE.md が地の文で書いたクラス名（`text-gray-500` など、実装では使っていない）を
+   拾ってビルドに混ぜてしまう */
+@source not "../docs";
+@source not "../CLAUDE.md";
+@source not "../README.md";
+
+/* 端末の設定に従う。DaisyUI が :root に color-scheme と base-100 / base-content を
+   当てるので、UA のキャンバスも一緒に切り替わる（以前はそのために body の背景色を
+   自前で宣言していた）。テーマの切り替え UI は持たない */
 @plugin "daisyui" {
-  themes: light --default;
+  themes:
+    light --default,
+    dark --prefersdark;
 }
 
-/* 組み込み light の success は明るい緑（oklch(76%)）で、白地に文字として乗せると
-   コントラスト 1.96:1 になり収入の金額が読めない。地色として使う前提の値なので、
-   文字として使える濃さまで落とす。5.05:1 で、置き換え前の emerald-700（5.36:1）と
-   ほぼ同じ濃さになる。success-content も対で明るくしておく（暗くした success を
-   地色に使う箇所が出たとき、暗い緑に暗い緑が乗るのを避けるため）。
-   他の値は組み込み light から継承する */
+/* 組み込み light の success と error は明るい緑・赤（明度 76% と 71%）で、地色として
+   使い *-content を上に乗せる前提の値になっている。白地に文字として乗せると
+   success が 1.96:1、error が 2.86:1 で読めないため、文字として使える濃さまで
+   落とす（5.05:1 と 5.38:1。置き換え前の emerald-700 は 5.36:1、red-600 は 4.77:1）。
+   *-content も対で明るくしておく。暗くした地色の上に暗い文字が乗るのを避けるため。
+   dark 側は測ったうえで上書きしていない。暗い地では明るいままの方が読める
+   （収入 8.08:1、エラー 5.53:1）。他の値は組み込み light から継承する */
 @plugin "daisyui/theme" {
   name: "light";
   default: true;
   --color-success: oklch(52% 0.13 163.223);
   --color-success-content: oklch(98% 0.014 163.223);
+  --color-error: oklch(55% 0.19 13.428);
+  --color-error-content: oklch(98% 0.014 13.428);
 }
 
 /* iPhone のホーム画面から standalone で起動したときに、

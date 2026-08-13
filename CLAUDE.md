@@ -57,9 +57,9 @@ Access セッション切れの検出は `src/api/` にある。**リポジト�
 [ADR-0021](docs/adr/0021-no-list-virtualization.md)）。
 残りはフィルタ（[#15](https://github.com/Ries630/ZaimViewer/issues/15)）と
 PWA 化・実機確認（[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。
-**色はすべて DaisyUI の semantic トークンで書く。** 有効なテーマは `light` だけで、
-パレット直書き（`text-gray-500`）はテーマから外れるので使わない
-（[ADR-0022](docs/adr/0022-daisyui-for-form-components.md)）。ダークモードはまだ入れていない。
+**色はすべて DaisyUI の semantic トークンで書く。** パレット直書き（`text-gray-500`）は
+テーマから外れるので使わない（[ADR-0022](docs/adr/0022-daisyui-for-form-components.md)）。
+テーマは端末の設定に従う（[ADR-0024](docs/adr/0024-dark-mode-follows-device.md)）。
 
 **工程 ③ 編集機能: 未着手。** 単体編集 → フィルタ結果への一括編集。
 いずれも Zaim 更新 API へ順次反映する。署名側は POST + フォームボディまで
@@ -146,6 +146,7 @@ AUD を両方許す。本番で設定が欠けていれば全リクエストが 
 | 明細一覧を仮想化せず、取得済みの全件を素の DOM で描く | [0021](docs/adr/0021-no-list-virtualization.md) |
 | DaisyUI を採用する。色は semantic トークンで書き、パレット直書き（`text-gray-500`）は使わない | [0022](docs/adr/0022-daisyui-for-form-components.md) |
 | 収入の金額が白地で読めるよう、`light` テーマの `success` だけ値を上書きする。他の色は組み込みの既定のまま | [0023](docs/adr/0023-darken-success-for-income-amount.md) |
+| ダークモードは端末の設定に従う。色の上書きは `light` 側だけに閉じ、テーマ切り替え UI は持たない | [0024](docs/adr/0024-dark-mode-follows-device.md) |
 
 以下はコードとテストが守っているもので、ADR にはしていない。
 
