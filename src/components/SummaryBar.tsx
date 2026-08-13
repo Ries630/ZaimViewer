@@ -9,19 +9,21 @@ interface SummaryBarProps {
   total: number | undefined;
   /** 一致した明細の金額合計。未取得なら undefined。 */
   totalAmount: number | undefined;
+  /** 種別を 1 つに絞っているか。 */
+  singleMode: boolean;
 }
 
 /**
  * 件数と金額合計を出す。
  *
- * 合計は支出・収入・振替を素朴に足し合わせた値で、モードを絞るまで
- * 数字としての意味は薄い（#15 のフィルタで初めて意味を持つ）。
- * 誤読されないよう「全モード合算」と添えてある。
+ * 合計は一致した明細の金額を素朴に足し合わせた値なので、種別が混ざっていると
+ * 支出と収入を足した数になり、意味を持たない。種別を 1 つに絞るまでは
+ * 誤読されないよう注記を添える。
  *
  * @param props 件数と金額合計。
  * @returns サマリ表示。
  */
-export function SummaryBar({ total, totalAmount }: SummaryBarProps) {
+export function SummaryBar({ total, totalAmount, singleMode }: SummaryBarProps) {
   if (total === undefined || totalAmount === undefined) {
     // 読み込み中に高さが変わると、下の一覧が跳ねる
     return <div className="h-9" aria-hidden="true" />;
@@ -34,7 +36,7 @@ export function SummaryBar({ total, totalAmount }: SummaryBarProps) {
       </p>
       <p className="text-base-content/70">
         総額 <span className="tabular-nums">{formatAmount(totalAmount, "JPY")}</span>
-        <span className="ml-1 text-xs text-base-content/50">全モード合算</span>
+        {!singleMode && <span className="ml-1 text-xs text-base-content/50">種別を合算</span>}
       </p>
     </div>
   );

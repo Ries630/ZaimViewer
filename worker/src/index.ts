@@ -14,6 +14,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 
 import { type AccessEnv, accessGuard } from "./access";
+import { MAX_QUERY_BYTES, withinQueryByteLimit } from "./limits";
 import { type OAuth1Credentials } from "./oauth1";
 import { countTransactions, fetchTransactions, type TransactionFilter } from "./queries";
 import { accounts, categories, genres, syncMeta } from "./schema";
@@ -35,26 +36,6 @@ const MAX_LIMIT = 1000;
 
 /** 日付パラメータの書式。 */
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
-/**
- * キーワードの最大バイト数。
- *
- * D1 は LIKE / GLOB のパターン長を 50 バイトに制限している
- * （標準の SQLite ビルドは 50,000 なので、ローカルのテストでは踏めない）。
- * 実際に渡すパターンは前後に `%` が付くので、キーワード自体は 48 バイトまで。
- * UTF-8 の日本語は 1 文字 3 バイトなので、日本語だけなら 16 文字が上限になる。
- */
-const MAX_QUERY_BYTES = 48;
-
-/**
- * 文字列の UTF-8 バイト数が上限以内か判定する。
- *
- * @param value 判定する文字列。
- * @returns 上限以内なら true。
- */
-function withinQueryByteLimit(value: string): boolean {
-  return new TextEncoder().encode(value).length <= MAX_QUERY_BYTES;
-}
 
 /**
  * 環境変数から認証情報を組み立てる。

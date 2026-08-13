@@ -6,7 +6,7 @@
  * 重複・欠落は起きない。
  */
 
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import type { InferRequestType, InferResponseType } from "hono/client";
 
 import { client, unwrap } from "./client";
@@ -28,8 +28,8 @@ export type Transaction = InferResponseType<typeof endpoint, 200>["items"][numbe
  * 絞り込み条件。
  *
  * API のクエリパラメータから `limit` / `offset` を除いたもの。ページングは
- * このフックが決めるため、呼び出し側には触らせない。#14 では常に空で、
- * #15 のフィルタパネルがここを埋める。
+ * このフックが決めるため、呼び出し側には触らせない。組み立ては
+ * `src/lib/filter.ts` の `toTransactionFilter` が担う。
  */
 export type TransactionFilter = Omit<
   NonNullable<InferRequestType<typeof endpoint>["query"]>,
@@ -56,5 +56,8 @@ export function useTransactions(filter: TransactionFilter) {
       const next = lastPage.offset + lastPage.limit;
       return next < lastPage.total ? next : undefined;
     },
+    // 条件を変えるたびに骨組みへ戻ると、フィルタを詰めていく作業のあいだ
+    // 画面が跳ね続ける。前の結果を残したまま差し替える
+    placeholderData: keepPreviousData,
   });
 }
