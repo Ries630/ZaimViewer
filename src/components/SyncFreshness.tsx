@@ -58,7 +58,10 @@ export function SyncFreshness({ syncedAt, now }: SyncFreshnessProps) {
       <div
         id={POPOVER_ID}
         popover="auto"
-        className="freshness-popover rounded-lg bg-neutral px-3 py-2 text-sm text-neutral-content shadow-lg"
+        // 地と文字に base-content / base-100 を使い、テーマの明暗をそのまま反転させる。
+        // neutral だと dark テーマでページ背景とほぼ同じ暗さになり（1.26:1）、
+        // 吹き出しが背景に溶ける
+        className="freshness-popover rounded-lg bg-base-content px-3 py-2 text-sm text-base-100 shadow-lg"
       >
         {absolute} 時点のミラー
       </div>
