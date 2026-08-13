@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
+import { MAX_AMOUNT } from "../../worker/src/limits";
 import {
   DEFAULT_FILTER,
   type FilterState,
   type NameLookup,
   activeBadges,
+  parseAmount,
   toTransactionFilter,
 } from "./filter";
 
@@ -29,14 +31,14 @@ function stateWith(overrides: Partial<FilterState>): FilterState {
 }
 
 describe("toTransactionFilter", () => {
-  it("既定は振替を外し、未来を隠し、1,000 円未満を落とす", () => {
+  it("既定は振替を外して未来を隠すだけ。金額は絞らない", () => {
     const query = toTransactionFilter(DEFAULT_FILTER, TODAY);
 
     expect(query.mode).toEqual(["payment", "income"]);
     expect(query.date_to).toBe(TODAY);
-    expect(query.amount_min).toBe("1000");
     // 指定していない条件はキーごと落ちる（hono のクライアントが undefined を
     // クエリ文字列に出さないので、そのまま「指定なし = 制限なし」になる）
+    expect(query.amount_min).toBeUndefined();
     expect(query.date_from).toBeUndefined();
     expect(query.category_id).toBeUndefined();
     expect(query.q).toBeUndefined();
@@ -109,24 +111,45 @@ describe("toTransactionFilter", () => {
   });
 });
 
+describe("parseAmount", () => {
+  it("空欄は指定なし", () => {
+    expect(parseAmount("")).toBeNull();
+    expect(parseAmount("   ")).toBeNull();
+  });
+
+  it("0 以上の整数はそのまま通す", () => {
+    expect(parseAmount("0")).toBe(0);
+    expect(parseAmount("1000")).toBe(1000);
+  });
+
+  it("上限ちょうどは通し、1 超えたら弾く", () => {
+    expect(parseAmount("999999999")).toBe(MAX_AMOUNT);
+    expect(parseAmount("1000000000")).toBe("invalid");
+  });
+
+  it("API が 400 を返す桁数に届かない", () => {
+    // 安全な整数（2^53-1）を超えると zod の .int() が too_big で 400 を返す。
+    // UI で止めるので、その値が state に入ることはない
+    expect(parseAmount("9007199254740993")).toBe("invalid");
+  });
+
+  it("負数・小数・数値でないものは弾く（null にせず入力を残す）", () => {
+    expect(parseAmount("-1")).toBe("invalid");
+    expect(parseAmount("1.5")).toBe("invalid");
+    expect(parseAmount("abc")).toBe("invalid");
+  });
+});
+
 describe("activeBadges", () => {
-  it("既定では未来と金額と種別の 3 つが立つ", () => {
+  it("既定では未来と種別の 2 つが立つ", () => {
     const badges = activeBadges(DEFAULT_FILTER, TODAY, names);
-    expect(badges.map((badge) => badge.key)).toEqual(["hideFuture", "modes", "amount"]);
-    expect(badges.map((badge) => badge.label)).toEqual([
-      "未来を隠す",
-      "支出・収入",
-      "1,000 円 以上",
-    ]);
+    expect(badges.map((badge) => badge.key)).toEqual(["hideFuture", "modes"]);
+    expect(badges.map((badge) => badge.label)).toEqual(["未来を隠す", "支出・収入"]);
   });
 
   it("何も絞っていなければ空になる", () => {
     const badges = activeBadges(
-      stateWith({
-        hideFuture: false,
-        modes: ["payment", "income", "transfer"],
-        amountMin: null,
-      }),
+      stateWith({ hideFuture: false, modes: ["payment", "income", "transfer"] }),
       TODAY,
       names,
     );
@@ -134,8 +157,8 @@ describe("activeBadges", () => {
   });
 
   it("バッジは自分を外した状態を持つ", () => {
-    const badges = activeBadges(DEFAULT_FILTER, TODAY, names);
-    const future = badges.find((badge) => badge.key === "hideFuture");
+    const state = stateWith({ amountMin: 1000 });
+    const future = activeBadges(state, TODAY, names).find((badge) => badge.key === "hideFuture");
     expect(future?.next.hideFuture).toBe(false);
     // 他の条件は巻き添えにしない
     expect(future?.next.amountMin).toBe(1000);

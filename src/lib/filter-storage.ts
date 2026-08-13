@@ -10,6 +10,7 @@
  * バンドルへ載せる価値が無いため。
  */
 
+import { MAX_AMOUNT } from "../../worker/src/limits";
 import { DEFAULT_FILTER, type FilterState, MODES, type Mode } from "./filter";
 import type { PeriodPreset } from "./period";
 
@@ -72,13 +73,17 @@ function asDate(value: unknown): string | null {
 }
 
 /**
- * 0 以上の整数を取り出す。
+ * 金額を取り出す。
+ *
+ * 上限を超えた値は落とす。API が 400 を返す値が保存に残っていると、
+ * 起動しただけで一覧が出ない状態になる。
  *
  * @param value 保存されていた値。
- * @returns 整数、または null。
+ * @returns 金額、または null。
  */
 function asAmount(value: unknown): number | null {
-  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
+  if (typeof value !== "number" || !Number.isInteger(value)) return null;
+  return value >= 0 && value <= MAX_AMOUNT ? value : null;
 }
 
 /**

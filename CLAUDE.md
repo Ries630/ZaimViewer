@@ -56,8 +56,9 @@ Access セッション切れの検出は `src/api/` にある。**リポジト�
 [ADR-0021](docs/adr/0021-no-list-virtualization.md)）。
 
 フィルタは「ヘッダ常設 + ボトムシート」（[#15](https://github.com/Ries630/ZaimViewer/issues/15)）。
-**既定は振替除外 + 未来を隠す + 1,000 円未満を除外の 3 段**で、初期表示は 4,370 件中
-1,881 件から始まる。状態は localStorage に永続化し、URL とは同期しない
+**既定は振替除外 + 未来を隠すの 2 段**で、初期表示は 4,370 件中 3,839 件から始まる。
+金額の下限は既定に置かない（情報を落とす条件なので画面で指定する）。状態は
+localStorage に永続化し、URL とは同期しない
 （[ADR-0026](docs/adr/0026-filter-defaults-and-persistence.md)）。
 残りは PWA 化・実機確認（[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。
 
@@ -153,7 +154,7 @@ AUD を両方許す。本番で設定が欠けていれば全リクエストが 
 | 収入の金額が白地で読めるよう、`light` テーマの `success` だけ値を上書きする。他の色は組み込みの既定のまま | [0023](docs/adr/0023-darken-success-for-income-amount.md) |
 | ダークモードは端末の設定に従う。色の上書きは `light` 側だけに閉じ、テーマ切り替え UI は持たない | [0024](docs/adr/0024-dark-mode-follows-device.md) |
 | 日付演算にだけ Temporal を使い、適用範囲を `src/lib/period.ts` に閉じる。表示の整形は `Intl` のまま | [0025](docs/adr/0025-temporal-for-date-arithmetic.md) |
-| フィルタの既定値（3 段）と保存先は PWA が持つ。localStorage に永続化し、URL とは同期しない | [0026](docs/adr/0026-filter-defaults-and-persistence.md) |
+| フィルタの既定値（振替除外 + 未来を隠す）と保存先は PWA が持つ。localStorage に永続化し、URL とは同期しない | [0026](docs/adr/0026-filter-defaults-and-persistence.md) |
 
 以下はコードとテストが守っているもので、ADR にはしていない。
 
@@ -168,10 +169,20 @@ RPC の型が `typeof app` に積み上がらず、PWA の `hc<AppType>` から�
 50 バイトに制限している（標準の SQLite ビルドは 50,000 なのでローカルでは踏めない）。
 前後に `%` が付くぶんを引いて 48 バイト。日本語だけなら 16 文字が上限になる。
 本番 D1 で確認済み（50 バイトは通り、51 バイトで `SQLITE_ERROR [code: 7500]`）。
-**この値の正は `worker/src/limits.ts` の 1 か所**で、Worker（400 を返す判定）と
-クライアント（入力欄でそれより前に気付かせる）の両方がそこから import する。
-依存を持たない別モジュールにしてあるのが肝で、`index.ts` に置いたまま値として
-import するとクライアントのバンドルに Worker 本体が入る。
+
+**入力の上限値の正は `worker/src/limits.ts` の 1 か所。** キーワードの 48 バイトと
+金額の 9 桁（`MAX_AMOUNT`）がここにあり、Worker（400 を返す判定）とクライアント
+（入力欄でそれより前に止める）の両方がそこから import する。依存を持たない別モジュールに
+してあるのが肝で、`index.ts` に置いたまま値として import するとクライアントのバンドルに
+Worker 本体が入る。金額に上限を置いているのは、`<input type="number">` が桁数を
+制限せず、安全な整数（2^53-1）を超えると zod の `.int()` が `too_big` で 400 を返すため。
+
+**入力欄では `input-sm` を使わない。** daisyUI は iOS Safari 限定
+（`@media (pointer:coarse)` かつ `@supports (-webkit-touch-callout:none)`）で
+`.input:focus` の font-size を 1rem に上げる。iOS Safari が 16px 未満の入力欄で
+ページを拡大するのを封じるための措置だが、フォーカスのたび文字が跳ねる。
+`src/index.css` の `@utility input` で `--font-size-min: 1rem` に固定して
+最初から 16px にしてあり、`input-sm`（0.75rem）を足すとその指定と食い違う。
 
 **スキーマ定義は 2 か所にあり、テストで守る。** テーブルの実体は `sync.ts` の
 DDL が作り、読み取りの型付けは `schema.ts` が担う。片方だけ変更すると

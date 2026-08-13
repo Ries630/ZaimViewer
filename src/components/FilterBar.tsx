@@ -33,7 +33,7 @@ export function FilterBar({ filter, badges, onChange, onOpenSheet }: FilterBarPr
   return (
     <div className="flex flex-col gap-2 pt-2">
       <div className="flex items-center gap-2">
-        <label className={`input input-sm grow ${tooLong ? "input-error" : ""}`}>
+        <label className={`input grow ${tooLong ? "input-error" : ""}`}>
           <span className="opacity-60" aria-hidden="true">
             🔍
           </span>

@@ -14,7 +14,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 
 import { type AccessEnv, accessGuard } from "./access";
-import { MAX_QUERY_BYTES, withinQueryByteLimit } from "./limits";
+import { MAX_AMOUNT, MAX_QUERY_BYTES, withinQueryByteLimit } from "./limits";
 import { type OAuth1Credentials } from "./oauth1";
 import { countTransactions, fetchTransactions, type TransactionFilter } from "./queries";
 import { accounts, categories, genres, syncMeta } from "./schema";
@@ -81,8 +81,8 @@ const transactionQuery = z.object({
   category_id: repeatable(z.coerce.number().int()),
   genre_id: repeatable(z.coerce.number().int()),
   account_id: repeatable(z.coerce.number().int()),
-  amount_min: z.coerce.number().int().min(0).optional(),
-  amount_max: z.coerce.number().int().min(0).optional(),
+  amount_min: z.coerce.number().int().min(0).max(MAX_AMOUNT).optional(),
+  amount_max: z.coerce.number().int().min(0).max(MAX_AMOUNT).optional(),
   q: z
     .string()
     .refine(withinQueryByteLimit, {

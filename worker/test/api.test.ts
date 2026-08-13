@@ -3,6 +3,7 @@
 import { SELF, env } from "cloudflare:test";
 import { beforeAll, expect, it, vi } from "vitest";
 
+import { MAX_AMOUNT } from "../src/limits";
 import { accessEnv, installAccess, issueToken, withToken } from "./access-harness";
 import { SYNCED_AT, TRANSACTION_COUNT, seedDatabase } from "./fixtures";
 
@@ -57,6 +58,18 @@ it("不正な日付書式は 400 で弾く", async () => {
 it("上限を超える limit は 400 で弾く", async () => {
   const res = await SELF.fetch(url("/api/transactions?limit=9999"));
   expect(res.status).toBe(400);
+});
+
+it("金額は 9 桁まで受け付け、超えたら 400 で弾く", async () => {
+  // 上限を置かないと、安全な整数（2^53-1）を超えた時点で zod が too_big を返す。
+  // 400 の理由が「桁が大きすぎる」だと分かるよう、明示した上限で弾く
+  expect((await SELF.fetch(url(`/api/transactions?amount_min=${MAX_AMOUNT}`))).status).toBe(200);
+  expect((await SELF.fetch(url(`/api/transactions?amount_min=${MAX_AMOUNT + 1}`))).status).toBe(
+    400,
+  );
+  expect((await SELF.fetch(url(`/api/transactions?amount_max=${MAX_AMOUNT + 1}`))).status).toBe(
+    400,
+  );
 });
 
 it("負の offset は 400 で弾く", async () => {

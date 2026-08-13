@@ -10,7 +10,7 @@
  */
 
 import type { TransactionFilter } from "../api/transactions";
-import { withinQueryByteLimit } from "../../worker/src/limits";
+import { MAX_AMOUNT, withinQueryByteLimit } from "../../worker/src/limits";
 import { type DateRange, type PeriodPreset, clampToToday, rangeOfPreset } from "./period";
 
 /** 明細の種別。 */
@@ -56,9 +56,9 @@ export interface FilterState {
 /**
  * 初期状態。
  *
- * 実データでの効き方は「全 4,370 件 → 振替除外 3,879 → 未来を隠して 3,839 →
- * 1,000 円未満を除外して 1,881」。この 3 段を既定に置く（ADR-0026）。
- * 少額の明細（手数料など）を見たいときは、そのつど条件を緩める。
+ * 既定は「振替を除外」と「未来を隠す」の 2 段で、実データでは
+ * 全 4,370 件 → 3,879 → 3,839 になる（ADR-0026）。金額の下限は既定に置かない。
+ * 情報を落とす条件なので、いくらで切るかは画面で指定してもらう。
  */
 export const DEFAULT_FILTER: FilterState = {
   period: "all",
@@ -69,12 +69,30 @@ export const DEFAULT_FILTER: FilterState = {
   categoryIds: [],
   genreIds: [],
   accountIds: [],
-  amountMin: 1000,
+  amountMin: null,
   amountMax: null,
   q: "",
   excludePlaces: [],
   excludeGenreIds: [],
 };
+
+/**
+ * 入力欄の文字列を金額に変換する。
+ *
+ * 受け付けないものは `"invalid"` を返し、呼び出し側は状態を更新しない
+ * （`null` にすると入力途中の値が勝手に消える）。上限を UI で守るのは、
+ * 超えた値を送ると API が 400 を返すため。`<input type="number">` は
+ * 桁数を制限しないので、ここで止めないと 17 桁で到達する。
+ *
+ * @param value 入力欄の値。
+ * @returns 金額。空欄なら null、受け付けられない値なら `"invalid"`。
+ */
+export function parseAmount(value: string): number | null | "invalid" {
+  if (value.trim() === "") return null;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > MAX_AMOUNT) return "invalid";
+  return parsed;
+}
 
 /**
  * 状態が示す期間を返す。

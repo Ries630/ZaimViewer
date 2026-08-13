@@ -70,7 +70,7 @@ export function PeriodField({ filter, today, onChange }: PeriodFieldProps) {
       <div className="flex items-center gap-2">
         <input
           type="date"
-          className="input input-sm grow"
+          className="input grow"
           aria-label="開始日"
           value={range.from ?? ""}
           onChange={(event) => changeDate("from", event.target.value)}
@@ -78,7 +78,7 @@ export function PeriodField({ filter, today, onChange }: PeriodFieldProps) {
         <span aria-hidden="true">〜</span>
         <input
           type="date"
-          className="input input-sm grow"
+          className="input grow"
           aria-label="終了日"
           value={range.to ?? ""}
           onChange={(event) => changeDate("to", event.target.value)}

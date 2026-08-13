@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { MAX_AMOUNT } from "../../worker/src/limits";
 import { DEFAULT_FILTER } from "./filter";
 import { parseStoredFilter } from "./filter-storage";
 
@@ -81,6 +82,11 @@ describe("parseStoredFilter", () => {
 
   it("負の金額は受け付けない", () => {
     expect(parseStoredFilter(stored({ amountMin: -1 })).amountMin).toBeNull();
+  });
+
+  it("上限を超えた金額は落とす（起動しただけで 400 になるのを防ぐ）", () => {
+    expect(parseStoredFilter(stored({ amountMin: MAX_AMOUNT })).amountMin).toBe(MAX_AMOUNT);
+    expect(parseStoredFilter(stored({ amountMin: MAX_AMOUNT + 1 })).amountMin).toBeNull();
   });
 
   it("種別が空になったら既定に戻す（API では指定なし = 全件になるため）", () => {

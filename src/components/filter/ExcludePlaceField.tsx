@@ -55,7 +55,7 @@ export function ExcludePlaceField({ filter, onChange }: ExcludePlaceFieldProps) 
       <div className="join">
         <input
           type="text"
-          className="input input-sm join-item grow"
+          className="input join-item grow"
           placeholder="店舗名（完全一致）"
           aria-label="除外する店舗名"
           value={draft}
