@@ -321,12 +321,13 @@ export async function fetchMasters(db: MirrorDatabase): Promise<Masters> {
       .where(
         selectable(g.active, sql`EXISTS (SELECT 1 FROM transactions WHERE genre_id = ${g.id})`),
       )
-      // カテゴリを引けないジャンルは末尾へ。NULL は SQLite の昇順で先頭に来るため、
-      // COALESCE で明示的に大きい値へ倒す
+      // カテゴリを引けないジャンルは末尾へ。`activeFirst` と `modeOrder` は
+      // ELSE を持つので NULL の列でも「無効」「その他」に倒れるが、`sort` と `id`
+      // はそのまま NULL になり SQLite の昇順で先頭に来るので COALESCE で潰す
       .orderBy(
         activeFirst(g.active),
-        sql`COALESCE(${activeFirst(c.active)}, 9)`,
-        sql`COALESCE(${modeOrder(c.mode)}, 9)`,
+        activeFirst(c.active),
+        modeOrder(c.mode),
         sql`COALESCE(${c.sort}, 999999)`,
         sql`COALESCE(${c.id}, 999999)`,
         g.sort,

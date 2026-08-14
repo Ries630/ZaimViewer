@@ -254,8 +254,10 @@ function amountLabel(min: number | null, max: number | null): string | null {
 export function activeBadges(state: FilterState, today: string, names: NameLookup): FilterBadge[] {
   const badges: FilterBadge[] = [];
 
-  if (state.period !== "all") {
-    const range = rangeOf(state, today);
+  const range = rangeOf(state, today);
+  // custom で両端とも空なら何も絞っていない。日付欄を両方消したときに
+  // 「 〜 」だけのバッジが出るのを防ぐ
+  if (state.period !== "all" && (range.from !== null || range.to !== null)) {
     const preset = state.period === "custom" ? null : state.period;
     const label = preset
       ? (PRESET_LABELS[preset] ?? preset)

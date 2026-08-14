@@ -196,6 +196,16 @@ describe("activeBadges", () => {
     expect(custom.find((badge) => badge.key === "period")?.label).toBe("2026-01-01 〜 2026-03-31");
   });
 
+  it("custom で日付を両方消したら期間のバッジは出ない", () => {
+    // 何も絞っていないので「 〜 」だけのバッジを出す意味が無い
+    const badges = activeBadges(
+      stateWith({ period: "custom", dateFrom: null, dateTo: null }),
+      TODAY,
+      names,
+    );
+    expect(badges.find((badge) => badge.key === "period")).toBeUndefined();
+  });
+
   it("金額は範囲の指定の仕方でラベルが変わる", () => {
     const labelOf = (min: number | null, max: number | null) =>
       activeBadges(stateWith({ amountMin: min, amountMax: max }), TODAY, names).find(

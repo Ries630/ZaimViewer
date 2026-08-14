@@ -39,8 +39,11 @@ interface FilterSheetProps {
  * @returns 見出し付きの選択肢。
  */
 function genreGroups(genres: Masters["genres"], masters: Masters): OptionGroup[] {
-  return groupGenresByCategory(genres, masters.categories).map((group) => ({
-    key: String(group.categoryId ?? "none"),
+  // key に添字を混ぜるのは、同じカテゴリのまとまりが 2 つできうるため。
+  // API は削除済みのジャンルを末尾へ回すので、有効なジャンルと削除済みの
+  // ジャンルを両方持つカテゴリは離れた位置に 2 度現れる（ADR-0027）
+  return groupGenresByCategory(genres, masters.categories).map((group, index) => ({
+    key: `${group.categoryId ?? "none"}-${index}`,
     label: group.categoryName,
     options: group.genres,
   }));

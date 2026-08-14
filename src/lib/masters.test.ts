@@ -96,6 +96,15 @@ describe("groupGenresByCategory", () => {
   it("空なら空になる", () => {
     expect(groupGenresByCategory([], masters.categories)).toEqual([]);
   });
+
+  it("同じカテゴリが離れて並ぶとまとまりも 2 つになる（削除済みは末尾へ回るため）", () => {
+    const withDeleted = [
+      ...masters.genres,
+      { id: 1103, category_id: 101, name: "旧・外食", sort: 0, active: -1 },
+    ];
+    const groups = groupGenresByCategory(withDeleted, masters.categories);
+    expect(groups.map((group) => group.categoryId)).toEqual([101, 102, 201, 101]);
+  });
 });
 
 describe("nameLookup", () => {
@@ -149,5 +158,10 @@ describe("reconcile", () => {
   it("除外ジャンルは巻き込まない（選択肢の従属関係に無いため）", () => {
     const state = stateWith({ modes: ["payment"], excludeGenreIds: [2101] });
     expect(reconcile(state, masters).excludeGenreIds).toEqual([2101]);
+  });
+
+  it("選択肢に無い口座を落とす（削除され、明細からも参照されなくなった口座）", () => {
+    const state = stateWith({ accountIds: [301, 999] });
+    expect(reconcile(state, masters).accountIds).toEqual([301]);
   });
 });

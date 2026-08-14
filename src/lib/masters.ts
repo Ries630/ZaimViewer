@@ -119,6 +119,8 @@ export function nameLookup(masters: Masters | undefined): NameLookup {
  * 選択肢から外れた選択を落とす。
  *
  * 種別を外すとそのカテゴリが、カテゴリを外すとそのジャンルが選べなくなる。
+ * 口座は他の選択に従属しないが、削除済みで明細からも参照されなくなったものは
+ * API が返さなくなるので、同じくここで落とす（ADR-0027）。
  * 除外ジャンルは対象にしない（選択肢の従属関係に無く、外れたまま残っていても
  * 「一致しないので何も除外しない」で済むため）。
  *
@@ -141,11 +143,15 @@ export function reconcile(state: FilterState, masters: Masters | undefined): Fil
   );
   const genreIds = state.genreIds.filter((id) => allowedGenres.has(id));
 
+  const allowedAccounts = new Set(masters.accounts.map((account) => account.id));
+  const accountIds = state.accountIds.filter((id) => allowedAccounts.has(id));
+
   if (
     categoryIds.length === state.categoryIds.length &&
-    genreIds.length === state.genreIds.length
+    genreIds.length === state.genreIds.length &&
+    accountIds.length === state.accountIds.length
   ) {
     return state;
   }
-  return { ...state, categoryIds, genreIds };
+  return { ...state, categoryIds, genreIds, accountIds };
 }
