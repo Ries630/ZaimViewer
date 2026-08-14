@@ -13,26 +13,47 @@
 import type { Database, PreparedStatement } from "../src/db";
 import { swapSql, workTableDdl } from "../src/sync";
 
-/** (id, mode, name, sort) */
-const CATEGORIES: [number, string, string, number][] = [
-  [101, "payment", "Food", 1],
-  [102, "payment", "Home", 2],
-  [201, "income", "Salary", 1],
+/**
+ * (id, mode, name, sort, active)
+ *
+ * 並び順の検証を兼ねる。`sort` を Home < Food にしてあるので、
+ * `mode` の辞書順（income が先）ではなく「支出 → 収入」で並ぶことと、
+ * mode の中では `sort` に従うことが同時に確かめられる。
+ * 103 は Zaim で削除済みかつ明細から参照されていないので、選択肢から消える。
+ */
+const CATEGORIES: [number, string, string, number, number][] = [
+  [101, "payment", "Food", 2, 1],
+  [102, "payment", "Home", 1, 1],
+  [201, "income", "Salary", 1, 1],
+  [103, "payment", "廃止した費目", 0, -1],
 ];
 
-/** (id, category_id, name, sort) */
-const GENRES: [number, number, string, number][] = [
-  [1001, 101, "昼食", 1],
-  [1002, 101, "カフェ", 2],
-  [1003, 102, "Rent", 1],
-  [2001, 201, "給与", 1],
+/**
+ * (id, category_id, name, sort, active)
+ *
+ * 見出しがカテゴリの並びに従うことの検証を兼ねる。`category_id` の数値順なら
+ * 昼食・カフェ・Rent・給与だが、カテゴリの並び（Home → Food → Salary）に
+ * 従うので Rent が先頭に来る。
+ */
+const GENRES: [number, number, string, number, number][] = [
+  [1001, 101, "昼食", 1, 1],
+  [1002, 101, "カフェ", 2, 1],
+  [1003, 102, "Rent", 1, 1],
+  [2001, 201, "給与", 1, 1],
 ];
 
-/** (id, name, sort) */
-const ACCOUNTS: [number, string, number][] = [
-  [11, "みんなの銀行", 1],
-  [12, "PayPay残高", 2],
-  [13, "現金", 3],
+/**
+ * (id, name, sort, active)
+ *
+ * 13 は削除済みだが明細 8 が使っているので残る。`sort` が 0 なので、
+ * 素直に並べれば先頭に来るところを末尾へ回すことの検証になる。
+ * 14 は削除済みで参照も無いので消える。
+ */
+const ACCOUNTS: [number, string, number, number][] = [
+  [11, "みんなの銀行", 1, 1],
+  [12, "PayPay残高", 2, 1],
+  [13, "現金", 0, -1],
+  [14, "解約した口座", 0, -1],
 ];
 
 /**
@@ -86,13 +107,13 @@ export async function seedDatabase(db: Database): Promise<void> {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}')`,
   );
   const categoryStatement = db.prepare(
-    "INSERT INTO categories_new (id, mode, name, sort, raw) VALUES (?, ?, ?, ?, '{}')",
+    "INSERT INTO categories_new (id, mode, name, sort, active, raw) VALUES (?, ?, ?, ?, ?, '{}')",
   );
   const genreStatement = db.prepare(
-    "INSERT INTO genres_new (id, category_id, name, sort, raw) VALUES (?, ?, ?, ?, '{}')",
+    "INSERT INTO genres_new (id, category_id, name, sort, active, raw) VALUES (?, ?, ?, ?, ?, '{}')",
   );
   const accountStatement = db.prepare(
-    "INSERT INTO accounts_new (id, name, sort, raw) VALUES (?, ?, ?, '{}')",
+    "INSERT INTO accounts_new (id, name, sort, active, raw) VALUES (?, ?, ?, ?, '{}')",
   );
   const metaStatement = db.prepare("INSERT INTO sync_meta_new (key, value) VALUES (?, ?)");
 

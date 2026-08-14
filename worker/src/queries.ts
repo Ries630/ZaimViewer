@@ -8,6 +8,7 @@
  */
 
 import {
+  type AnyColumn,
   type SQL,
   and,
   count,
@@ -226,4 +227,125 @@ export async function countTransactions(
     .where(and(...conditions(filt)));
 
   return { total: row?.total ?? 0, totalAmount: Number(row?.totalAmount ?? 0) };
+}
+
+/**
+ * 非アクティブなマスタを末尾へ回す並び順。
+ *
+ * Zaim で削除したマスタは `sort` が 0 に潰れるため、素直に `sort` で並べると
+ * 削除済みのものが必ず先頭に来る。実データでは口座の先頭 4 件がこれに当たっていた。
+ *
+ * @param column 対象の `active` 列。
+ * @returns 並び替え用の式。
+ */
+function activeFirst(column: SQL | AnyColumn): SQL {
+  return sql`CASE WHEN ${column} = 1 THEN 0 ELSE 1 END`;
+}
+
+/**
+ * 支出 → 収入 → その他の並び順。
+ *
+ * `mode` の辞書順だと `income` が `payment` より先になり、Zaim の画面
+ * （支出が先）と食い違う。
+ *
+ * @param column 対象の `mode` 列。
+ * @returns 並び替え用の式。
+ */
+function modeOrder(column: SQL | AnyColumn): SQL {
+  return sql`CASE ${column} WHEN 'payment' THEN 0 WHEN 'income' THEN 1 ELSE 2 END`;
+}
+
+/**
+ * 選択肢として出す価値があるマスタか判定する条件を作る。
+ *
+ * Zaim で削除したマスタ（`active = -1`）は隠す。ただし明細から参照されている
+ * ものは残す。隠すと、その明細を口座やカテゴリで絞る手段が無くなるため。
+ * 本番の実測では、削除済みカテゴリを参照する明細は 0 件、削除済み口座を
+ * 参照する明細は 18 件（全 4,370 件の 0.4%）だった。
+ *
+ * @param active 対象の `active` 列。
+ * @param referenced 明細から参照されていることを表す条件。
+ * @returns WHERE に渡す条件。
+ */
+function selectable(active: AnyColumn, referenced: SQL): SQL {
+  return sql`(${active} = 1 OR ${referenced})`;
+}
+
+/** フィルタ UI の選択肢に使うマスタ一式。 */
+export interface Masters {
+  categories: {
+    id: number;
+    mode: string | null;
+    name: string | null;
+    sort: number | null;
+    active: number | null;
+  }[];
+  genres: {
+    id: number;
+    category_id: number | null;
+    name: string | null;
+    sort: number | null;
+    active: number | null;
+  }[];
+  accounts: { id: number; name: string | null; sort: number | null; active: number | null }[];
+}
+
+/**
+ * マスタ一式を、Zaim の画面と同じ並びで返す。
+ *
+ * 並びは「有効なものが先 → 支出・収入の順 → Zaim の `sort` → id」。
+ * ジャンルはカテゴリの並びに従わせる（`category_id` の数値順では、
+ * カテゴリ一覧と見出しの順序が揃わない）。
+ *
+ * @param db ミラー DB。
+ * @returns カテゴリ・ジャンル・口座。
+ */
+export async function fetchMasters(db: MirrorDatabase): Promise<Masters> {
+  const c = categories;
+  const g = genres;
+  const a = accounts;
+
+  const [categoryRows, genreRows, accountRows] = await Promise.all([
+    db
+      .select({ id: c.id, mode: c.mode, name: c.name, sort: c.sort, active: c.active })
+      .from(c)
+      .where(
+        selectable(c.active, sql`EXISTS (SELECT 1 FROM transactions WHERE category_id = ${c.id})`),
+      )
+      .orderBy(activeFirst(c.active), modeOrder(c.mode), c.sort, c.id),
+
+    db
+      .select({ id: g.id, category_id: g.categoryId, name: g.name, sort: g.sort, active: g.active })
+      .from(g)
+      .leftJoin(c, eq(c.id, g.categoryId))
+      .where(
+        selectable(g.active, sql`EXISTS (SELECT 1 FROM transactions WHERE genre_id = ${g.id})`),
+      )
+      // カテゴリを引けないジャンルは末尾へ。`activeFirst` と `modeOrder` は
+      // ELSE を持つので NULL の列でも「無効」「その他」に倒れるが、`sort` と `id`
+      // はそのまま NULL になり SQLite の昇順で先頭に来るので COALESCE で潰す
+      .orderBy(
+        activeFirst(g.active),
+        activeFirst(c.active),
+        modeOrder(c.mode),
+        sql`COALESCE(${c.sort}, 999999)`,
+        sql`COALESCE(${c.id}, 999999)`,
+        g.sort,
+        g.id,
+      ),
+
+    db
+      .select({ id: a.id, name: a.name, sort: a.sort, active: a.active })
+      .from(a)
+      .where(
+        selectable(
+          a.active,
+          sql`EXISTS (SELECT 1 FROM transactions
+                      WHERE from_account_id = ${a.id} OR to_account_id = ${a.id})`,
+        ),
+      )
+      .orderBy(activeFirst(a.active), a.sort, a.id),
+  ]);
+
+  return { categories: categoryRows, genres: genreRows, accounts: accountRows };
 }

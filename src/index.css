@@ -32,6 +32,21 @@
   --color-error-content: oklch(98% 0.014 13.428);
 }
 
+/* 入力欄の文字を最初から 16px にする。
+
+   daisyUI は iOS Safari 限定（@media (pointer:coarse) かつ
+   @supports (-webkit-touch-callout:none)）で `.input:focus` の font-size を 1rem に
+   上げる。iOS Safari が 16px 未満の入力欄にフォーカスするとページ全体を拡大するので、
+   それを封じるための措置だが、代わりにフォーカスのたび文字が跳ねる。
+   最初から 16px にしておけば拡大も跳ねも起きない（max() の両辺が 1rem で揃う）。
+
+   この指定は `input-sm` の 0.75rem も上書きするので、入力欄では `input-sm` を
+   使わない。高さだけ縮めても文字が 16px なら窮屈になるだけで、
+   iPhone のタップ目標としても既定の 2.5rem の方が適する */
+@utility input {
+  --font-size-min: 1rem;
+}
+
 /* iPhone のホーム画面から standalone で起動したときに、
    ノッチとホームインジケータの領域を避ける */
 @theme {

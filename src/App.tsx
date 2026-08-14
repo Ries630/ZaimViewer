@@ -1,20 +1,21 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
+import { useMasters } from "./api/masters";
 import { useMeta } from "./api/meta";
-import { type TransactionFilter, useTransactions } from "./api/transactions";
+import { useTransactions } from "./api/transactions";
+import { FilterBar } from "./components/FilterBar";
+import { FilterSheet } from "./components/FilterSheet";
 import { SummaryBar } from "./components/SummaryBar";
 import { SyncFreshness } from "./components/SyncFreshness";
 import { TransactionList } from "./components/TransactionList";
+import { useDebounced } from "./hooks/useDebounced";
+import { useStoredFilter } from "./hooks/useStoredFilter";
+import { DEFAULT_FILTER, type FilterState, activeBadges, toTransactionFilter } from "./lib/filter";
 import { todayInTokyo } from "./lib/format";
+import { nameLookup, reconcile } from "./lib/masters";
 
-/**
- * 絞り込み無し。
- *
- * API は「指定なし = 制限なし」に徹しており（ADR-0008）、既定値は PWA 側が
- * 持つ。その既定値を組み立てるのは #15 のフィルタパネルなので、#14 では
- * 全件を出す。振替も未来日付の明細も混ざったままになる。
- */
-const NO_FILTER: TransactionFilter = {};
+/** 入力が落ち着いたと見なすまでの時間。キーワードを 1 文字打つたびに取りに行かせない。 */
+const FILTER_DEBOUNCE_MS = 300;
 
 /**
  * 明細一覧の画面。
@@ -23,12 +24,37 @@ const NO_FILTER: TransactionFilter = {};
  */
 export function App() {
   const meta = useMeta();
-  const transactions = useTransactions(NO_FILTER);
+  const masters = useMasters();
+  const [filter, setFilter] = useStoredFilter();
+  const sheet = useRef<HTMLDialogElement>(null);
 
   // 相対表記の基準。取得し直したときだけ進めれば足りる
   // （ミラーは 1 日 1 回しか更新されないので、秒単位で追う意味が無い）
   const now = useMemo(() => new Date(), [meta.dataUpdatedAt]);
   const today = todayInTokyo(now);
+
+  const mastersData = masters.data;
+
+  // 保存しておいた選択が、同期でマスタから消えていることがある。
+  // マスタが届いた時点で一度均す（変化が無ければ reconcile は同じオブジェクトを
+  // 返すので、更新は起きない）
+  useEffect(() => {
+    setFilter((current) => reconcile(current, mastersData));
+  }, [mastersData, setFilter]);
+
+  // 種別を外せばそのカテゴリが、カテゴリを外せばそのジャンルが選択肢から消える。
+  // 画面に出ていない条件が効き続けないよう、更新は必ずここを通す
+  const updateFilter = useCallback(
+    (next: FilterState) => setFilter(reconcile(next, mastersData)),
+    [mastersData, setFilter],
+  );
+
+  const debounced = useDebounced(filter, FILTER_DEBOUNCE_MS);
+  const query = useMemo(() => toTransactionFilter(debounced, today), [debounced, today]);
+  const transactions = useTransactions(query);
+
+  const names = useMemo(() => nameLookup(mastersData), [mastersData]);
+  const badges = useMemo(() => activeBadges(filter, today, names), [filter, today, names]);
 
   const items = useMemo(
     () => transactions.data?.pages.flatMap((page) => page.items) ?? [],
@@ -50,10 +76,26 @@ export function App() {
           <h1 className="text-lg font-bold">ZaimViewer</h1>
           <SyncFreshness syncedAt={meta.data?.synced_at ?? null} now={now} />
         </div>
-        <SummaryBar total={totals?.total} totalAmount={totals?.total_amount} />
+        <FilterBar
+          filter={filter}
+          badges={badges}
+          onChange={updateFilter}
+          onOpenSheet={() => sheet.current?.showModal()}
+        />
+        <SummaryBar
+          total={totals?.total}
+          totalAmount={totals?.total_amount}
+          singleMode={filter.modes.length === 1}
+        />
       </header>
 
-      <main className="px-4 pb-safe-bottom">
+      {/* 条件を差し替えているあいだは前の結果を薄く出しておく。
+          消してしまうと、条件を詰める操作のたびに画面が空になる */}
+      <main
+        className={`px-4 pb-safe-bottom transition-opacity ${
+          transactions.isPlaceholderData ? "opacity-50" : ""
+        }`}
+      >
         <TransactionList
           items={items}
           today={today}
@@ -64,6 +106,16 @@ export function App() {
           onLoadMore={loadMore}
         />
       </main>
+
+      <FilterSheet
+        ref={sheet}
+        filter={filter}
+        masters={mastersData}
+        today={today}
+        total={totals?.total}
+        onChange={updateFilter}
+        onReset={() => setFilter(DEFAULT_FILTER)}
+      />
     </div>
   );
 }

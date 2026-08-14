@@ -14,9 +14,15 @@ import { Hono } from "hono";
 import { z } from "zod";
 
 import { type AccessEnv, accessGuard } from "./access";
+import { MAX_AMOUNT, MAX_QUERY_BYTES, withinQueryByteLimit } from "./limits";
 import { type OAuth1Credentials } from "./oauth1";
-import { countTransactions, fetchTransactions, type TransactionFilter } from "./queries";
-import { accounts, categories, genres, syncMeta } from "./schema";
+import {
+  countTransactions,
+  fetchMasters,
+  fetchTransactions,
+  type TransactionFilter,
+} from "./queries";
+import { syncMeta } from "./schema";
 import { syncAll } from "./sync";
 import { ZaimClient } from "./zaim";
 
@@ -35,26 +41,6 @@ const MAX_LIMIT = 1000;
 
 /** 日付パラメータの書式。 */
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
-/**
- * キーワードの最大バイト数。
- *
- * D1 は LIKE / GLOB のパターン長を 50 バイトに制限している
- * （標準の SQLite ビルドは 50,000 なので、ローカルのテストでは踏めない）。
- * 実際に渡すパターンは前後に `%` が付くので、キーワード自体は 48 バイトまで。
- * UTF-8 の日本語は 1 文字 3 バイトなので、日本語だけなら 16 文字が上限になる。
- */
-const MAX_QUERY_BYTES = 48;
-
-/**
- * 文字列の UTF-8 バイト数が上限以内か判定する。
- *
- * @param value 判定する文字列。
- * @returns 上限以内なら true。
- */
-function withinQueryByteLimit(value: string): boolean {
-  return new TextEncoder().encode(value).length <= MAX_QUERY_BYTES;
-}
 
 /**
  * 環境変数から認証情報を組み立てる。
@@ -100,8 +86,8 @@ const transactionQuery = z.object({
   category_id: repeatable(z.coerce.number().int()),
   genre_id: repeatable(z.coerce.number().int()),
   account_id: repeatable(z.coerce.number().int()),
-  amount_min: z.coerce.number().int().min(0).optional(),
-  amount_max: z.coerce.number().int().min(0).optional(),
+  amount_min: z.coerce.number().int().min(0).max(MAX_AMOUNT).optional(),
+  amount_max: z.coerce.number().int().min(0).max(MAX_AMOUNT).optional(),
   q: z
     .string()
     .refine(withinQueryByteLimit, {
@@ -175,32 +161,7 @@ const routes = app
    * 件数が高々 200 程度なので、PWA 側は起動時に一括取得して以降は使い回す。
    */
   .get("/api/masters", async (c) => {
-    const db = drizzle(c.env.DB);
-    const [categoryRows, genreRows, accountRows] = await Promise.all([
-      db
-        .select({
-          id: categories.id,
-          mode: categories.mode,
-          name: categories.name,
-          sort: categories.sort,
-        })
-        .from(categories)
-        .orderBy(categories.mode, categories.sort, categories.id),
-      db
-        .select({
-          id: genres.id,
-          category_id: genres.categoryId,
-          name: genres.name,
-          sort: genres.sort,
-        })
-        .from(genres)
-        .orderBy(genres.categoryId, genres.sort, genres.id),
-      db
-        .select({ id: accounts.id, name: accounts.name, sort: accounts.sort })
-        .from(accounts)
-        .orderBy(accounts.sort, accounts.id),
-    ]);
-    return c.json({ categories: categoryRows, genres: genreRows, accounts: accountRows });
+    return c.json(await fetchMasters(drizzle(c.env.DB)));
   })
   /** ミラーの同期時刻と件数を返す。UI に鮮度を表示するために使う。 */
   .get("/api/meta", async (c) => {
