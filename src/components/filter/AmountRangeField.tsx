@@ -19,7 +19,9 @@ interface AmountRangeFieldProps {
  * ここに下限を入れる。
  *
  * **受け付けない入力は状態を更新しない。** 小数や上限超過を `null` に倒すと、
- * 入力途中の値が消えて打ち直しになる。
+ * 入力途中の値が消えて打ち直しになる。桁数の上限は API のエラーを防ぐためのもので、
+ * 家計の金額で届く値ではないため、画面には出さない（`maxlength` と同じく、
+ * 入らないことで分かれば足りる）。
  *
  * @param props 状態と更新関数。
  * @returns 金額の入力欄。
@@ -68,7 +70,6 @@ export function AmountRangeField({ filter, onChange }: AmountRangeFieldProps) {
         />
         <span className="text-sm text-base-content/60">円</span>
       </div>
-      <p className="label">9 桁まで</p>
     </fieldset>
   );
 }
