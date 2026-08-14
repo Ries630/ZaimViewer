@@ -155,6 +155,7 @@ AUD を両方許す。本番で設定が欠けていれば全リクエストが 
 | ダークモードは端末の設定に従う。色の上書きは `light` 側だけに閉じ、テーマ切り替え UI は持たない | [0024](docs/adr/0024-dark-mode-follows-device.md) |
 | 日付演算にだけ Temporal を使い、適用範囲を `src/lib/period.ts` に閉じる。表示の整形は `Intl` のまま | [0025](docs/adr/0025-temporal-for-date-arithmetic.md) |
 | フィルタの既定値（振替除外 + 未来を隠す）と保存先は PWA が持つ。localStorage に永続化し、URL とは同期しない | [0026](docs/adr/0026-filter-defaults-and-persistence.md) |
+| フィルタの選択肢は Zaim の並び（有効なものが先 → 支出・収入 → `sort`）で返す。削除済みは明細から参照されているものだけ残す | [0027](docs/adr/0027-master-options-follow-zaim-order.md) |
 
 以下はコードとテストが守っているもので、ADR にはしていない。
 
@@ -208,6 +209,12 @@ DDL と差し替え処理をそのまま使うので、スキーマの写しは�
 載せる場合も、その層は `TransactionFilter` を組み立てるだけでよく SQL を書かずに済む。
 プリセットを今作らないのは、どのノイズを消したいかが実データを触りながら
 決まる段階で、固まっていないルールを設定ファイルに固定したくないため。
+
+**マスタの並び替えも `worker/src/queries.ts` の `fetchMasters` に閉じる。**
+選択肢は Zaim の画面と同じ順序で返す必要があり、その材料（`active`、カテゴリの
+`sort`、明細からの参照）はすべて SQL の側にある。クライアントで並べ替えると
+全件を持ってきてから捨てることになる（[ADR-0027](docs/adr/0027-master-options-follow-zaim-order.md)）。
+**削除済みのマスタは `sort` が 0 に潰れる**ので、素直に `sort` で並べると先頭に来る。
 
 **クライアント側は `FilterState`（画面の状態）と `TransactionFilter`（API の引数）を
 別の型で持つ。** 両者は 1 対 1 でなく、たとえば「未来を隠す」は API に無い概念で、

@@ -8,6 +8,8 @@ export interface SelectOption {
   id: number;
   /** 表示名。 */
   name: string | null;
+  /** Zaim での有効・無効。1 以外は削除済み。 */
+  active: number | null;
 }
 
 /** 見出しでまとめた選択肢。見出しが要らないときは `label` を null にする。 */
@@ -95,6 +97,11 @@ export function MasterMultiSelect({
                       onChange={(event) => toggle(option.id, event.target.checked)}
                     />
                     {option.name ?? `#${option.id}`}
+                    {/* Zaim では消えているが、過去の明細が使っているので残してある。
+                        印が無いと、今も使える口座だと思って選んでしまう */}
+                    {option.active !== 1 && (
+                      <span className="text-xs text-base-content/50">削除済み</span>
+                    )}
                   </label>
                 ))}
               </div>

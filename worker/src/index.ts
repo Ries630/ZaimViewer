@@ -16,8 +16,13 @@ import { z } from "zod";
 import { type AccessEnv, accessGuard } from "./access";
 import { MAX_AMOUNT, MAX_QUERY_BYTES, withinQueryByteLimit } from "./limits";
 import { type OAuth1Credentials } from "./oauth1";
-import { countTransactions, fetchTransactions, type TransactionFilter } from "./queries";
-import { accounts, categories, genres, syncMeta } from "./schema";
+import {
+  countTransactions,
+  fetchMasters,
+  fetchTransactions,
+  type TransactionFilter,
+} from "./queries";
+import { syncMeta } from "./schema";
 import { syncAll } from "./sync";
 import { ZaimClient } from "./zaim";
 
@@ -156,32 +161,7 @@ const routes = app
    * 件数が高々 200 程度なので、PWA 側は起動時に一括取得して以降は使い回す。
    */
   .get("/api/masters", async (c) => {
-    const db = drizzle(c.env.DB);
-    const [categoryRows, genreRows, accountRows] = await Promise.all([
-      db
-        .select({
-          id: categories.id,
-          mode: categories.mode,
-          name: categories.name,
-          sort: categories.sort,
-        })
-        .from(categories)
-        .orderBy(categories.mode, categories.sort, categories.id),
-      db
-        .select({
-          id: genres.id,
-          category_id: genres.categoryId,
-          name: genres.name,
-          sort: genres.sort,
-        })
-        .from(genres)
-        .orderBy(genres.categoryId, genres.sort, genres.id),
-      db
-        .select({ id: accounts.id, name: accounts.name, sort: accounts.sort })
-        .from(accounts)
-        .orderBy(accounts.sort, accounts.id),
-    ]);
-    return c.json({ categories: categoryRows, genres: genreRows, accounts: accountRows });
+    return c.json(await fetchMasters(drizzle(c.env.DB)));
   })
   /** ミラーの同期時刻と件数を返す。UI に鮮度を表示するために使う。 */
   .get("/api/meta", async (c) => {

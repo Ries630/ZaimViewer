@@ -13,19 +13,19 @@ import {
 /** 本物と同じ形の小さなマスタ。API の並び順（mode / category_id ごと）を再現する。 */
 const masters: Masters = {
   categories: [
-    { id: 101, mode: "payment", name: "食費", sort: 1 },
-    { id: 102, mode: "payment", name: "日用雑貨", sort: 2 },
-    { id: 201, mode: "income", name: "給与", sort: 1 },
+    { id: 101, mode: "payment", name: "食費", sort: 1, active: 1 },
+    { id: 102, mode: "payment", name: "日用雑貨", sort: 2, active: 1 },
+    { id: 201, mode: "income", name: "給与", sort: 1, active: 1 },
   ],
   genres: [
-    { id: 1101, category_id: 101, name: "食料品", sort: 1 },
-    { id: 1102, category_id: 101, name: "外食", sort: 2 },
-    { id: 1201, category_id: 102, name: "消耗品", sort: 1 },
-    { id: 2101, category_id: 201, name: "給与", sort: 1 },
+    { id: 1101, category_id: 101, name: "食料品", sort: 1, active: 1 },
+    { id: 1102, category_id: 101, name: "外食", sort: 2, active: 1 },
+    { id: 1201, category_id: 102, name: "消耗品", sort: 1, active: 1 },
+    { id: 2101, category_id: 201, name: "給与", sort: 1, active: 1 },
   ],
   accounts: [
-    { id: 301, name: "楽天カード", sort: 1 },
-    { id: 302, name: "現金", sort: 2 },
+    { id: 301, name: "楽天カード", sort: 1, active: 1 },
+    { id: 302, name: "現金", sort: 2, active: 1 },
   ],
 };
 
@@ -52,7 +52,10 @@ describe("categoriesForModes", () => {
   });
 
   it("mode が空のカテゴリは常に残す", () => {
-    const withNull = [...masters.categories, { id: 999, mode: null, name: "不明", sort: 9 }];
+    const withNull = [
+      ...masters.categories,
+      { id: 999, mode: null, name: "不明", sort: 9, active: 1 },
+    ];
     expect(categoriesForModes(withNull, ["transfer"]).map((c) => c.id)).toEqual([999]);
   });
 });
@@ -70,7 +73,10 @@ describe("genresForCategories", () => {
   });
 
   it("カテゴリに紐付かないジャンルは絞り込みで落ちる", () => {
-    const orphan = [...masters.genres, { id: 9999, category_id: null, name: "不明", sort: 9 }];
+    const orphan = [
+      ...masters.genres,
+      { id: 9999, category_id: null, name: "不明", sort: 9, active: 1 },
+    ];
     expect(genresForCategories(orphan, [101]).map((g) => g.id)).toEqual([1101, 1102]);
   });
 });
@@ -83,7 +89,7 @@ describe("groupGenresByCategory", () => {
   });
 
   it("名前を引けないカテゴリは「その他」になる", () => {
-    const orphan = [{ id: 9999, category_id: null, name: "不明", sort: 9 }];
+    const orphan = [{ id: 9999, category_id: null, name: "不明", sort: 9, active: 1 }];
     expect(groupGenresByCategory(orphan, masters.categories)[0]?.categoryName).toBe("その他");
   });
 

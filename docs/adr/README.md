@@ -66,6 +66,7 @@ CLAUDE.md には**結論**だけを置く。毎セッション自動で読み込
 | [0024](0024-dark-mode-follows-device.md) | ダークモードは端末の設定に従い、色の上書きは `light` 側だけに閉じる | 承認済み |
 | [0025](0025-temporal-for-date-arithmetic.md) | 日付演算に Temporal を使い、表示の整形は `Intl` のまま残す | 承認済み |
 | [0026](0026-filter-defaults-and-persistence.md) | フィルタの既定値と保存先を PWA が持ち、localStorage に永続化する | 承認済み |
+| [0027](0027-master-options-follow-zaim-order.md) | フィルタの選択肢は Zaim の並びに従わせ、削除済みは参照されているものだけ残す | 承認済み |
 
 ### 未決・進行中
 
