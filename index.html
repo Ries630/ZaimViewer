@@ -5,6 +5,13 @@
     <!-- iPhone からの利用が主。viewport-fit=cover でノッチ下まで背景を伸ばす -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
+    <!-- standalone 起動時のステータスバーの色。端末のテーマに従う（ADR-0024）ため
+         2 本に分ける。値は daisyUI の base-100（light は白、dark は #1d232a） -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1d232a" />
+    <!-- iOS はマニフェストの icons よりこちらを優先する -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <title>ZaimViewer</title>
   </head>
   <body>
