@@ -68,7 +68,7 @@ export function ExcludePlaceField({ filter, onChange }: ExcludePlaceFieldProps) 
             }
           }}
         />
-        <button type="button" className="btn join-item btn-sm" onClick={add}>
+        <button type="button" className="btn join-item" onClick={add}>
           追加
         </button>
       </div>

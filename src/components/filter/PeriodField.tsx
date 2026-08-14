@@ -48,7 +48,9 @@ export function PeriodField({ filter, today, onChange }: PeriodFieldProps) {
     <fieldset className="fieldset">
       <legend className="fieldset-legend">期間</legend>
 
-      <div className="join">
+      {/* 幅を等分させる。5 つ並ぶので、既定の内側余白のままだと 375pt 幅の端末で
+          ちょうど収まりきる寸法になり、文言を変えるだけで溢れる */}
+      <div className="join w-full">
         {PERIOD_PRESETS.map((preset) => (
           <button
             key={preset.value}
@@ -56,7 +58,9 @@ export function PeriodField({ filter, today, onChange }: PeriodFieldProps) {
             // 選択中の見え方は種別のチェックボックス（daisyUI が checked に当てる
             // primary）に合わせる。同じシートの中で「選ばれている」の表し方が
             // 2 通りあると、どちらかが壊れているように見える
-            className={`btn join-item btn-sm ${filter.period === preset.value ? "btn-primary" : ""}`}
+            className={`btn join-item flex-1 px-2 ${
+              filter.period === preset.value ? "btn-primary" : ""
+            }`}
             aria-pressed={filter.period === preset.value}
             onClick={() =>
               onChange({ ...filter, period: preset.value, dateFrom: null, dateTo: null })

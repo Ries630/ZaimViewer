@@ -41,14 +41,14 @@ export function ModeField({ filter, onChange }: ModeFieldProps) {
   return (
     <fieldset className="fieldset">
       <legend className="fieldset-legend">種別</legend>
-      <div className="join">
+      <div className="join w-full">
         {MODES.map((mode) => {
           const checked = filter.modes.includes(mode.value);
           return (
             <input
               key={mode.value}
               type="checkbox"
-              className="btn join-item btn-sm"
+              className="btn join-item flex-1"
               aria-label={mode.label}
               checked={checked}
               // 最後の 1 つを外そうとしても状態は変わらないので、そうと分かるようにする

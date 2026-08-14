@@ -52,7 +52,7 @@ export function FilterBar({ filter, badges, onChange, onOpenSheet }: FilterBarPr
           )}
         </label>
 
-        <button type="button" className="btn btn-sm" onClick={onOpenSheet}>
+        <button type="button" className="btn" onClick={onOpenSheet}>
           絞り込み
           {badges.length > 0 && <span className="badge badge-sm">{badges.length}</span>}
         </button>
