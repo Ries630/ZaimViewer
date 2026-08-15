@@ -211,6 +211,14 @@ Worker 本体が入る。金額に上限を置いているのは、`<input type=
 文字サイズは入力欄 16px / ボタン 14px で揃わないが、これは iOS 対策で入力欄だけ
 上げた結果で、高さが揃っていれば問題にならない。
 
+**オフラインではクエリが「失敗」せず「停止」する。** TanStack Query の既定
+（`networkMode: "online"`）はオフラインを検知したクエリを発行せずに止めるので、
+`error` は `null`、`isPending` は `true` のままになる。これを見落とすと骨組みが
+出続けて「処理が進んでいる」ように見える。判定は `isPaused` で、接続状態の出所は
+`src/hooks/useOnline.ts` の 1 か所に寄せてある。**`networkMode` を `"always"` に
+しない。** オフラインでもクエリが飛んでエラー表示には落ちるが、接続が戻ったときに
+自動で取り直す挙動が失われる（[#27](https://github.com/Ries630/ZaimViewer/issues/27)）。
+
 **マニフェストの `link` には `crossorigin="use-credentials"` が要る。** ブラウザは
 マニフェストを既定で資格情報なしに取りに行くため、Access 配下では Cookie が付かず
 302 → 別オリジン → CORS で必ず失敗する。`vite.config.ts` の `useCredentials: true` が
