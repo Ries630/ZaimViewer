@@ -69,6 +69,12 @@ precache するのはハッシュ付きの JS / CSS とアイコンだけで、�
 `location.reload()` が必ずネットワークに出る。アイコンは `public/icon.svg` が原本で、
 PNG は `./scripts/make-icons.sh` で作り直す。
 
+**アイコンのダーク版は渡せない。** iOS 18 以降はダーク版を持たないアイコンを OS が
+自動で暗くするので、緑地は端末がダークモードだと黒に近くなる。`apple-touch-icon` の
+`media="(prefers-color-scheme: dark)"` は iOS では効かず（スプラッシュ画像には効く）、
+マニフェストの `icons` にも配色を指定する項目が無い。iPhone 実機で確認済みなので、
+暗くなるのを直そうとしない。
+
 **色はすべて DaisyUI の semantic トークンで書く。** パレット直書き（`text-gray-500`）は
 テーマから外れるので使わない（[ADR-0022](docs/adr/0022-daisyui-for-form-components.md)）。
 テーマは端末の設定に従う（[ADR-0024](docs/adr/0024-dark-mode-follows-device.md)）。
