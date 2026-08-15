@@ -1,6 +1,7 @@
 # ADR-0016: Cloudflare Access でアプリ全体を保護する
 
-- ステータス: 提案
+- ステータス: 承認済み（下記「未検証の点」は 2026-08-15 に実機で解消。結果は
+  [#16](https://github.com/Ries630/ZaimViewer/issues/16) のコメント）
 - 日付: 2026-08-09
 - 関連: [#5](https://github.com/Ries630/ZaimViewer/issues/5)、[ADR-0005](0005-tailscale-for-access.md) を置換
 

@@ -57,6 +57,7 @@ CLAUDE.md には**結論**だけを置く。毎セッション自動で読み込
 | [0013](0013-voidzero-toolchain.md) | ツールチェーンを TypeScript 7 + oxlint + oxfmt にする（Vite+ 不採用） | 承認済み |
 | [0014](0014-drizzle-for-reads.md) | 読み取りは Drizzle、同期は素の SQL | 承認済み |
 | [0015](0015-sync-outside-worker.md) | 同期は Worker の外（手元の Mac mini）で実行する | 承認済み |
+| [0016](0016-cloudflare-access.md) | Cloudflare Access でアプリ全体を保護する | 承認済み |
 | [0018](0018-d1-http-api-for-sync.md) | 同期は D1 の HTTP API を叩く自作ドライバから書き込む | 承認済み |
 | [0019](0019-verify-access-jwt-in-worker.md) | Access の JWT を Worker 自身でも検証する | 承認済み |
 | [0020](0020-single-package-vite-worker.md) | PWA と Worker を 1 パッケージに同居させ、ルートをアプリのルートにする | 承認済み |
@@ -73,7 +74,6 @@ CLAUDE.md には**結論**だけを置く。毎セッション自動で読み込
 
 | # | 決定 | ステータス |
 |---|---|---|
-| [0016](0016-cloudflare-access.md) | Cloudflare Access でアプリ全体を保護する | 提案（[#5](https://github.com/Ries630/ZaimViewer/issues/5)） |
 | [0017](0017-adr-in-repo.md) | 設計判断を ADR として `docs/adr/` に残す | 承認済み |
 
 ## テンプレート

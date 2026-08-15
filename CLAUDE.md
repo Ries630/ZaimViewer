@@ -61,7 +61,9 @@ Access セッション切れの検出は `src/api/` にある。**リポジト�
 localStorage に永続化し、URL とは同期しない
 （[ADR-0026](docs/adr/0026-filter-defaults-and-persistence.md)）。
 
-**PWA 化: 実装は完了、実機確認が残り（[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。**
+**PWA 化: 完了（[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。**
+ホーム画面から standalone で起動し、セッションが切れても再認証して戻れることを
+iPhone で確認済み（「デプロイの前提」参照）。
 `vite-plugin-pwa` でマニフェストと Service Worker を出す。**Service Worker が
 precache するのはハッシュ付きの JS / CSS とアイコンだけで、ナビゲーションと
 `/api/*` には触らない**（[ADR-0028](docs/adr/0028-service-worker-precache-only.md)）。
@@ -136,9 +138,14 @@ Mac mini がスリープ中でも閲覧できる（ミラーが古くなるだ�
 AUD を両方許す。本番で設定が欠けていれば全リクエストが 403 になる（fail closed）
 → [ADR-0019](docs/adr/0019-verify-access-jwt-in-worker.md)
 
-**未検証: Cloudflare Access の挙動。** ホーム画面から起動した PWA でセッションが
-切れたときの再認証は、PWA ができるまで分からない。セッション期間は最長 1 か月
-→ [ADR-0016](docs/adr/0016-cloudflare-access.md)（提案のまま）
+**PWA からの再認証は実機で確認済み。** ホーム画面から起動した状態でセッションを
+revoke しても、Access のログインを踏んで明細一覧まで戻ってこられる。IdP は Google
+のみなので選択画面は出ない。ただし**その PWA での初回の再認証だけは、Access の
+中間画面で止まり、アプリを起動し直す必要がある**（iOS のホーム画面 Web アプリは
+Safari と Cookie ストアが別で、初回だけ Google のログイン画面を実際に踏むため、
+と見ている）。2 回目以降は中断なく戻る。セッション期間は最長 1 か月
+→ [ADR-0016](docs/adr/0016-cloudflare-access.md)、確認の記録は
+[#16](https://github.com/Ries630/ZaimViewer/issues/16)
 
 ## 設計上の決定
 
@@ -313,13 +320,9 @@ Cloudflare の認証情報（`Account > D1 > Edit` のトークン）が必要
 
 ## 残っている作業
 
-1. ホーム画面から起動したときの Access 再認証の実機確認
-   （[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。マニフェストと
-   Service Worker は入っているので、残るのは iPhone での確認だけ。ADR-0016 を
-   「承認済み」にできるのはここ
-2. 明細の主表示が長いときに全文を読む手段
+1. 明細の主表示が長いときに全文を読む手段
    （[#19](https://github.com/Ries630/ZaimViewer/issues/19)）
-3. 工程 ③ の編集プロキシ（`ZaimClient` に更新系メソッドを足すところから）。
+2. 工程 ③ の編集プロキシ（`ZaimClient` に更新系メソッドを足すところから）。
    `wrangler secret put` で Zaim の認証情報を入れるのもここ。同期を Worker の外へ
    出したので、それまで本番に認証情報は要らない
 
