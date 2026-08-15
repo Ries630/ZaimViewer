@@ -60,7 +60,22 @@ Access セッション切れの検出は `src/api/` にある。**リポジト�
 金額の下限は既定に置かない（情報を落とす条件なので画面で指定する）。状態は
 localStorage に永続化し、URL とは同期しない
 （[ADR-0026](docs/adr/0026-filter-defaults-and-persistence.md)）。
-残りは PWA 化・実機確認（[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。
+
+**PWA 化: 完了（[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。**
+ホーム画面から standalone で起動し、セッションが切れても再認証して戻れることを
+iPhone で確認済み（「デプロイの前提」参照）。
+`vite-plugin-pwa` でマニフェストと Service Worker を出す。**Service Worker が
+precache するのはハッシュ付きの JS / CSS とアイコンだけで、ナビゲーションと
+`/api/*` には触らない**（[ADR-0028](docs/adr/0028-service-worker-precache-only.md)）。
+オフラインではアプリが起動しない代わりに、Access のセッションが切れたときの
+`location.reload()` が必ずネットワークに出る。アイコンは `public/icon.svg` が原本で、
+PNG は `./scripts/make-icons.sh` で作り直す。
+
+**アイコンのダーク版は渡せない。** iOS 18 以降はダーク版を持たないアイコンを OS が
+自動で暗くするので、緑地は端末がダークモードだと黒に近くなる。`apple-touch-icon` の
+`media="(prefers-color-scheme: dark)"` は iOS では効かず（スプラッシュ画像には効く）、
+マニフェストの `icons` にも配色を指定する項目が無い。iPhone 実機で確認済みなので、
+暗くなるのを直そうとしない。
 
 **色はすべて DaisyUI の semantic トークンで書く。** パレット直書き（`text-gray-500`）は
 テーマから外れるので使わない（[ADR-0022](docs/adr/0022-daisyui-for-form-components.md)）。
@@ -84,6 +99,7 @@ localStorage に永続化し、URL とは同期しない
 | テスト | vitest + `@cloudflare/vitest-pool-workers` | workerd 上で実物の D1 を使う |
 | パッケージ管理 | bun | peer dependency の解決が緩いので、更新時は要注意 |
 | PWA | React + Vite + `@cloudflare/vite-plugin` | Worker と単一の dev サーバで動き、同一オリジンで API を叩ける |
+| マニフェスト / SW | `vite-plugin-pwa`（`generateSW`） | 設定だけで済む。precache の範囲は絞る（ADR-0028） |
 | スタイル | Tailwind CSS v4（`@tailwindcss/vite`） | 設定ファイルを持たず CSS 側で完結する |
 | UI 部品 | DaisyUI 5 | #15 のフォーム部品。CSS 側の `@plugin` だけで載る |
 | データ取得 | TanStack Query | `useInfiniteQuery` が無限スクロールに、キャッシュがフィルタ切り替えに効く |
@@ -122,9 +138,14 @@ Mac mini がスリープ中でも閲覧できる（ミラーが古くなるだ�
 AUD を両方許す。本番で設定が欠けていれば全リクエストが 403 になる（fail closed）
 → [ADR-0019](docs/adr/0019-verify-access-jwt-in-worker.md)
 
-**未検証: Cloudflare Access の挙動。** ホーム画面から起動した PWA でセッションが
-切れたときの再認証は、PWA ができるまで分からない。セッション期間は最長 1 か月
-→ [ADR-0016](docs/adr/0016-cloudflare-access.md)（提案のまま）
+**PWA からの再認証は実機で確認済み。** ホーム画面から起動した状態でセッションを
+revoke しても、Access のログインを踏んで明細一覧まで戻ってこられる。IdP は Google
+のみなので選択画面は出ない。ただし**その PWA での初回の再認証だけは、Access の
+中間画面で止まり、アプリを起動し直す必要がある**（iOS のホーム画面 Web アプリは
+Safari と Cookie ストアが別で、初回だけ Google のログイン画面を実際に踏むため、
+と見ている）。2 回目以降は中断なく戻る。セッション期間は最長 1 か月
+→ [ADR-0016](docs/adr/0016-cloudflare-access.md)、確認の記録は
+[#16](https://github.com/Ries630/ZaimViewer/issues/16)
 
 ## 設計上の決定
 
@@ -156,6 +177,7 @@ AUD を両方許す。本番で設定が欠けていれば全リクエストが 
 | 日付演算にだけ Temporal を使い、適用範囲を `src/lib/period.ts` に閉じる。表示の整形は `Intl` のまま | [0025](docs/adr/0025-temporal-for-date-arithmetic.md) |
 | フィルタの既定値（振替除外 + 未来を隠す）と保存先は PWA が持つ。localStorage に永続化し、URL とは同期しない | [0026](docs/adr/0026-filter-defaults-and-persistence.md) |
 | フィルタの選択肢は Zaim の並び（有効なものが先 → 支出・収入 → `sort`）で返す。削除済みは明細から参照されているものだけ残す | [0027](docs/adr/0027-master-options-follow-zaim-order.md) |
+| Service Worker は静的アセットの precache だけに使い、ナビゲーションと `/api/*` には触らせない | [0028](docs/adr/0028-service-worker-precache-only.md) |
 
 以下はコードとテストが守っているもので、ADR にはしていない。
 
@@ -188,6 +210,12 @@ Worker 本体が入る。金額に上限を置いているのは、`<input type=
 しない。** 32px と 40px が同じ行に並ぶと、とくに `join` で枠線が揃わず崩れて見える。
 文字サイズは入力欄 16px / ボタン 14px で揃わないが、これは iOS 対策で入力欄だけ
 上げた結果で、高さが揃っていれば問題にならない。
+
+**マニフェストの `link` には `crossorigin="use-credentials"` が要る。** ブラウザは
+マニフェストを既定で資格情報なしに取りに行くため、Access 配下では Cookie が付かず
+302 → 別オリジン → CORS で必ず失敗する。`vite.config.ts` の `useCredentials: true` が
+この属性を出している。外すとホーム画面に追加したときだけ名前もアイコンも
+反映されない、という形で出る（画面は普通に動くので気付きにくい）。
 
 **スキーマ定義は 2 か所にあり、テストで守る。** テーブルの実体は `sync.ts` の
 DDL が作り、読み取りの型付けは `schema.ts` が担う。片方だけ変更すると
@@ -240,6 +268,7 @@ bun run lint        # oxlint（型認識ルール込み）
 bun run format      # oxfmt
 bun run cf-typegen  # wrangler.jsonc 変更後に型を再生成
 bun run db:init     # 本番 D1 に空のミラーを作る（既存テーブルは DROP される）
+./scripts/make-icons.sh  # public/icon.svg からホーム画面アイコンの PNG を作り直す
 bunx wrangler deploy
 bunx wrangler tail  # デプロイ後のリクエストログ
 ```
@@ -291,12 +320,9 @@ Cloudflare の認証情報（`Account > D1 > Edit` のトークン）が必要
 
 ## 残っている作業
 
-1. PWA 化と、ホーム画面から起動したときの Access 再認証の実機確認
-   （[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。ADR-0016 を
-   「承認済み」にできるのはここ
-2. 明細の主表示が長いときに全文を読む手段
+1. 明細の主表示が長いときに全文を読む手段
    （[#19](https://github.com/Ries630/ZaimViewer/issues/19)）
-3. 工程 ③ の編集プロキシ（`ZaimClient` に更新系メソッドを足すところから）。
+2. 工程 ③ の編集プロキシ（`ZaimClient` に更新系メソッドを足すところから）。
    `wrangler secret put` で Zaim の認証情報を入れるのもここ。同期を Worker の外へ
    出したので、それまで本番に認証情報は要らない
 

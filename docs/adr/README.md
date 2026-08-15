@@ -57,6 +57,7 @@ CLAUDE.md には**結論**だけを置く。毎セッション自動で読み込
 | [0013](0013-voidzero-toolchain.md) | ツールチェーンを TypeScript 7 + oxlint + oxfmt にする（Vite+ 不採用） | 承認済み |
 | [0014](0014-drizzle-for-reads.md) | 読み取りは Drizzle、同期は素の SQL | 承認済み |
 | [0015](0015-sync-outside-worker.md) | 同期は Worker の外（手元の Mac mini）で実行する | 承認済み |
+| [0016](0016-cloudflare-access.md) | Cloudflare Access でアプリ全体を保護する | 承認済み |
 | [0018](0018-d1-http-api-for-sync.md) | 同期は D1 の HTTP API を叩く自作ドライバから書き込む | 承認済み |
 | [0019](0019-verify-access-jwt-in-worker.md) | Access の JWT を Worker 自身でも検証する | 承認済み |
 | [0020](0020-single-package-vite-worker.md) | PWA と Worker を 1 パッケージに同居させ、ルートをアプリのルートにする | 承認済み |
@@ -67,12 +68,12 @@ CLAUDE.md には**結論**だけを置く。毎セッション自動で読み込
 | [0025](0025-temporal-for-date-arithmetic.md) | 日付演算に Temporal を使い、表示の整形は `Intl` のまま残す | 承認済み |
 | [0026](0026-filter-defaults-and-persistence.md) | フィルタの既定値と保存先を PWA が持ち、localStorage に永続化する | 承認済み |
 | [0027](0027-master-options-follow-zaim-order.md) | フィルタの選択肢は Zaim の並びに従わせ、削除済みは参照されているものだけ残す | 承認済み |
+| [0028](0028-service-worker-precache-only.md) | Service Worker は静的アセットの precache だけに使い、ナビゲーションと `/api/*` には触らせない | 承認済み |
 
 ### 未決・進行中
 
 | # | 決定 | ステータス |
 |---|---|---|
-| [0016](0016-cloudflare-access.md) | Cloudflare Access でアプリ全体を保護する | 提案（[#5](https://github.com/Ries630/ZaimViewer/issues/5)） |
 | [0017](0017-adr-in-repo.md) | 設計判断を ADR として `docs/adr/` に残す | 承認済み |
 
 ## テンプレート
