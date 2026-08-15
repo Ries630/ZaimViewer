@@ -277,9 +277,16 @@ bun run format      # oxfmt
 bun run cf-typegen  # wrangler.jsonc 変更後に型を再生成
 bun run db:init     # 本番 D1 に空のミラーを作る（既存テーブルは DROP される）
 ./scripts/make-icons.sh  # public/icon.svg からホーム画面アイコンの PNG を作り直す
-bunx wrangler deploy
+bun run deploy      # ビルドして本番へ（マージ後）
 bunx wrangler tail  # デプロイ後のリクエストログ
 ```
+
+**画面に出る変更は、マージ前に Preview へ上げて実機で見る。** 手順は
+`bun run build` のあと `bunx wrangler versions upload -c dist/zaimviewer/wrangler.json`。
+本番のトラフィックは切り替わらず、`<version>-zaimviewer.ries.workers.dev` が出る。
+Preview 用の Access アプリの AUD は `wrangler.jsonc` の `POLICY_AUD` に登録済みなので、
+そのまま iPhone から開ける。**Preview URL はバージョンごとに変わる**ので、
+ホーム画面に追加したものは確認が済んだら消す。本番へは `bun run deploy` で出す。
 
 **コマンドはすべてリポジトリルートで実行する。** `worker/` にあった
 `package.json` などは ADR-0020 でルートへ上がった。`worker/` に残っているのは
