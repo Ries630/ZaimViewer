@@ -18,6 +18,8 @@ interface TransactionListProps {
   today: string;
   /** 最初のページを取得中か。 */
   isPending: boolean;
+  /** オフラインで取得が止まっているか。 */
+  isPaused: boolean;
   /** 取得に失敗したときのエラー。 */
   error: Error | null;
   /** 続きがあるか。 */
@@ -38,6 +40,7 @@ export function TransactionList({
   items,
   today,
   isPending,
+  isPaused,
   error,
   hasNextPage,
   isFetchingNextPage,
@@ -45,6 +48,18 @@ export function TransactionList({
 }: TransactionListProps) {
   if (error) {
     return <p className="py-8 text-center text-error">読み込めなかった: {error.message}</p>;
+  }
+
+  // オフラインではクエリが発行されずに止まる（`networkMode` の既定）。このとき
+  // error は null、isPending は true のままなので、素直に書くと骨組みが出続ける。
+  // 骨組みは動きがあるぶん「処理が進んでいる」と読めてしまうため、
+  // 止まっていることの方を出す
+  if (isPending && isPaused) {
+    return (
+      <p className="py-8 text-center text-base-content/60">
+        オフライン。接続が戻ると自動で読み込む
+      </p>
+    );
   }
 
   if (isPending) {

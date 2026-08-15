@@ -211,6 +211,14 @@ Worker 本体が入る。金額に上限を置いているのは、`<input type=
 文字サイズは入力欄 16px / ボタン 14px で揃わないが、これは iOS 対策で入力欄だけ
 上げた結果で、高さが揃っていれば問題にならない。
 
+**オフラインではクエリが「失敗」せず「停止」する。** TanStack Query の既定
+（`networkMode: "online"`）はオフラインを検知したクエリを発行せずに止めるので、
+`error` は `null`、`isPending` は `true` のままになる。これを見落とすと骨組みが
+出続けて「処理が進んでいる」ように見える。判定は `isPaused` で、接続状態の出所は
+`src/hooks/useOnline.ts` の 1 か所に寄せてある。**`networkMode` を `"always"` に
+しない。** オフラインでもクエリが飛んでエラー表示には落ちるが、接続が戻ったときに
+自動で取り直す挙動が失われる（[#27](https://github.com/Ries630/ZaimViewer/issues/27)）。
+
 **マニフェストの `link` には `crossorigin="use-credentials"` が要る。** ブラウザは
 マニフェストを既定で資格情報なしに取りに行くため、Access 配下では Cookie が付かず
 302 → 別オリジン → CORS で必ず失敗する。`vite.config.ts` の `useCredentials: true` が
@@ -269,9 +277,16 @@ bun run format      # oxfmt
 bun run cf-typegen  # wrangler.jsonc 変更後に型を再生成
 bun run db:init     # 本番 D1 に空のミラーを作る（既存テーブルは DROP される）
 ./scripts/make-icons.sh  # public/icon.svg からホーム画面アイコンの PNG を作り直す
-bunx wrangler deploy
+bun run deploy      # ビルドして本番へ（マージ後）
 bunx wrangler tail  # デプロイ後のリクエストログ
 ```
+
+**画面に出る変更は、マージ前に Preview へ上げて実機で見る。** 手順は
+`bun run build` のあと `bunx wrangler versions upload -c dist/zaimviewer/wrangler.json`。
+本番のトラフィックは切り替わらず、`<version>-zaimviewer.ries.workers.dev` が出る。
+Preview 用の Access アプリの AUD は `wrangler.jsonc` の `POLICY_AUD` に登録済みなので、
+そのまま iPhone から開ける。**Preview URL はバージョンごとに変わる**ので、
+ホーム画面に追加したものは確認が済んだら消す。本番へは `bun run deploy` で出す。
 
 **コマンドはすべてリポジトリルートで実行する。** `worker/` にあった
 `package.json` などは ADR-0020 でルートへ上がった。`worker/` に残っているのは

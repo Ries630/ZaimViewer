@@ -9,6 +9,7 @@ import { SummaryBar } from "./components/SummaryBar";
 import { SyncFreshness } from "./components/SyncFreshness";
 import { TransactionList } from "./components/TransactionList";
 import { useDebounced } from "./hooks/useDebounced";
+import { useOnline } from "./hooks/useOnline";
 import { useStoredFilter } from "./hooks/useStoredFilter";
 import { DEFAULT_FILTER, type FilterState, activeBadges, toTransactionFilter } from "./lib/filter";
 import { todayInTokyo } from "./lib/format";
@@ -26,6 +27,7 @@ export function App() {
   const meta = useMeta();
   const masters = useMasters();
   const [filter, setFilter] = useStoredFilter();
+  const online = useOnline();
   const sheet = useRef<HTMLDialogElement>(null);
 
   // 相対表記の基準。取得し直したときだけ進めれば足りる
@@ -74,7 +76,16 @@ export function App() {
       <header className="sticky top-0 z-10 border-b border-base-300 bg-base-100 px-4 pt-safe-top">
         <div className="flex items-baseline justify-between gap-2 pt-3">
           <h1 className="text-lg font-bold">ZaimViewer</h1>
-          <SyncFreshness syncedAt={meta.data?.synced_at ?? null} now={now} />
+          <div className="flex items-baseline gap-2">
+            {/* 同期の鮮度と並べる。別の軸だが、オフラインの間はミラーを
+                更新しようがないので、鮮度の隣に出るのが読み手には自然 */}
+            {!online && (
+              <span className="shrink-0 rounded bg-warning px-2 py-1 text-sm font-medium text-warning-content">
+                オフライン
+              </span>
+            )}
+            <SyncFreshness syncedAt={meta.data?.synced_at ?? null} now={now} />
+          </div>
         </div>
         <FilterBar
           filter={filter}
@@ -100,6 +111,7 @@ export function App() {
           items={items}
           today={today}
           isPending={transactions.isPending}
+          isPaused={transactions.isPaused}
           error={transactions.error}
           hasNextPage={hasNextPage}
           isFetchingNextPage={isFetchingNextPage}
