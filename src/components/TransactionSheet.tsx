@@ -6,8 +6,41 @@ import { Fragment, type RefObject } from "react";
 
 import type { Transaction } from "../api/transactions";
 import { formatDateHeading, isFutureDate } from "../lib/format";
-import { detailFields } from "../lib/transaction";
+import { commentSegments, detailFields } from "../lib/transaction";
 import { Amount } from "./Amount";
+import { ModeBadge } from "./ModeBadge";
+
+interface CommentTextProps {
+  /** 表示するメモ。 */
+  comment: string;
+}
+
+/**
+ * メモを、タグだけ見分けが付く形で出す。
+ *
+ * タグ（`#MUFG取込` など）は自動連携の出どころや処理待ちを表しており、
+ * メモのある明細のほぼ全件に付いている。平文と同じ見た目だと埋もれる。
+ *
+ * @param props メモ。
+ * @returns タグを囲んだメモ。
+ */
+function CommentText({ comment }: CommentTextProps) {
+  return (
+    <>
+      {commentSegments(comment).map((segment, index) =>
+        segment.tag ? (
+          // badge は inline-flex なので、行の途中に混ざると下端が揃わない。
+          // 素の span に色と角丸だけ当てて、文字として流す
+          <span key={index} className="rounded bg-base-200 px-1 text-sm text-base-content/70">
+            {segment.text}
+          </span>
+        ) : (
+          <Fragment key={index}>{segment.text}</Fragment>
+        ),
+      )}
+    </>
+  );
+}
 
 interface TransactionSheetProps {
   /** シートの開閉を親が握るための参照。 */
@@ -49,8 +82,11 @@ export function TransactionSheet({ ref, transaction, today }: TransactionSheetPr
                   <span className="badge badge-info badge-sm">予定</span>
                 )}
               </div>
-              <p className="mt-1 text-2xl">
-                <Amount transaction={transaction} />
+              {/* 種別は金額を修飾するものなので隣に置く。ラベルと値の対に
+                  するより、値が 3 つに限られるぶんバッジの方が速く読める */}
+              <p className="mt-1 flex items-center gap-2">
+                <Amount transaction={transaction} className="text-2xl" />
+                <ModeBadge mode={transaction.mode} />
               </p>
             </div>
 
@@ -58,9 +94,11 @@ export function TransactionSheet({ ref, transaction, today }: TransactionSheetPr
                 値だけが折り返せればよく、ラベルは折り返させない */}
             <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-2 overflow-y-auto px-5">
               {detailFields(transaction).map((field) => (
-                <Fragment key={field.label}>
+                <Fragment key={field.key}>
                   <dt className="text-sm whitespace-nowrap text-base-content/60">{field.label}</dt>
-                  <dd className="break-words">{field.value}</dd>
+                  <dd className="break-words">
+                    {field.key === "comment" ? <CommentText comment={field.value} /> : field.value}
+                  </dd>
                 </Fragment>
               ))}
             </dl>
