@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Transaction } from "../api/transactions";
-import { groupByDate, rowText } from "./transaction";
+import { detailFields, groupByDate, rowText } from "./transaction";
 
 /**
  * 明細を組み立てる。
@@ -110,6 +110,69 @@ describe("rowText", () => {
 
   it("手がかりが何も無ければ内容なしと出す", () => {
     expect(rowText(transaction()).primary).toBe("（内容なし）");
+  });
+});
+
+describe("detailFields", () => {
+  it("店舗・品名・メモを畳まずに別々の項目として出す", () => {
+    // 一覧では "Microsoft / Azure" に畳んでメモを補足へ回すが、
+    // 詳細ではどれがどの項目か分かる形で出す
+    const fields = detailFields(
+      transaction({ place: "Microsoft", name: "Azure", comment: " #サブスクリプション" }),
+    );
+    expect(fields).toEqual([
+      { label: "種別", value: "支出" },
+      { label: "店舗", value: "Microsoft" },
+      { label: "品名", value: "Azure" },
+      { label: "メモ", value: "#サブスクリプション" },
+    ]);
+  });
+
+  it("空の項目は落とす", () => {
+    const fields = detailFields(transaction({ place: "いなほクリニック" }));
+    expect(fields.map((field) => field.label)).toEqual(["種別", "店舗"]);
+  });
+
+  it("支出には出金元だけが出る", () => {
+    const fields = detailFields(
+      transaction({ category: "Medical", genre: "Prescription", from_account: "Triaカード残高" }),
+    );
+    expect(fields.map((field) => field.label)).toEqual(["種別", "カテゴリ", "ジャンル", "出金元"]);
+  });
+
+  it("収入には入金先だけが出る", () => {
+    const fields = detailFields(
+      transaction({ mode: "income", category: "Salary", to_account: "みんなの銀行" }),
+    );
+    expect(fields).toEqual([
+      { label: "種別", value: "収入" },
+      { label: "カテゴリ", value: "Salary" },
+      { label: "入金先", value: "みんなの銀行" },
+    ]);
+  });
+
+  it("振替には口座が両方出る", () => {
+    const fields = detailFields(
+      transaction({ mode: "transfer", from_account: "MetaMask", to_account: "Grvt" }),
+    );
+    expect(fields).toEqual([
+      { label: "種別", value: "振替" },
+      { label: "出金元", value: "MetaMask" },
+      { label: "入金先", value: "Grvt" },
+    ]);
+  });
+
+  it("知らない種別はそのまま出す", () => {
+    // Zaim が種別を増やしても、空欄になるより原文が見えた方が手がかりになる
+    expect(detailFields(transaction({ mode: "unknown" }))[0]).toEqual({
+      label: "種別",
+      value: "unknown",
+    });
+  });
+
+  it("何も入っていなくても種別だけは残る", () => {
+    // 繰り返し登録の家賃のように三つとも空の行がある
+    expect(detailFields(transaction()).map((field) => field.label)).toEqual(["種別"]);
   });
 });
 

@@ -77,6 +77,56 @@ export function rowText(tx: Transaction): RowText {
   return { primary: context ?? EMPTY_LABEL, context: null, note: null };
 }
 
+/** 詳細に出す項目 1 つ。 */
+export interface DetailField {
+  /** 項目名。 */
+  label: string;
+  /** 値。空の項目は組み立ての時点で落とすので、必ず中身がある。 */
+  value: string;
+}
+
+/** 種別の表示名。Zaim が返す `mode` をそのまま出すと英語だけが並ぶ。 */
+const MODE_LABELS: Record<string, string> = {
+  payment: "支出",
+  income: "収入",
+  transfer: "振替",
+};
+
+/**
+ * 明細の詳細に出す項目を組み立てる。
+ *
+ * 一覧の `rowText` と違い、フォールバックも省略もしない。切れた主表示の
+ * 全文を読むのがこの表示の目的なので、店舗・品名・メモを畳まず別々に出す。
+ *
+ * 項目は Zaim の更新 API が受け付けるものに合わせてある（日付と金額は
+ * 見出しに出すのでここには含めない）。工程 ③ でこの表示が編集フォームに
+ * なったとき、読める項目と直せる項目がずれないようにするため。
+ *
+ * 口座は種別で分岐しない。実データでは支出に出金元だけ、収入に入金先だけ、
+ * 振替に両方が入っており、関係の無い側は必ず空になる（本番の全 4,370 件で確認）。
+ *
+ * @param tx 明細。
+ * @returns 中身のある項目だけを、表示順に並べたもの。
+ */
+export function detailFields(tx: Transaction): DetailField[] {
+  const candidates: [string, string | null][] = [
+    ["種別", MODE_LABELS[tx.mode] ?? tx.mode],
+    // 切れて読めなかったのはこの 3 つなので先に置く
+    ["店舗", tx.place],
+    ["品名", tx.name],
+    ["メモ", tx.comment],
+    ["カテゴリ", tx.category],
+    ["ジャンル", tx.genre],
+    ["出金元", tx.from_account],
+    ["入金先", tx.to_account],
+  ];
+
+  return candidates.flatMap(([label, value]) => {
+    const cleaned = clean(value);
+    return cleaned === null ? [] : [{ label, value: cleaned }];
+  });
+}
+
 /** 同じ日付の明細のまとまり。 */
 export interface DateGroup {
   /** `YYYY-MM-DD` 形式の日付。 */
