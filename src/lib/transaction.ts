@@ -77,6 +77,128 @@ export function rowText(tx: Transaction): RowText {
   return { primary: context ?? EMPTY_LABEL, context: null, note: null };
 }
 
+/** 詳細に出す項目の識別子。表示の出し分けに使う。 */
+export type DetailFieldKey =
+  | "place"
+  | "name"
+  | "comment"
+  | "category"
+  | "genre"
+  | "from_account"
+  | "to_account";
+
+/** 詳細に出す項目 1 つ。 */
+export interface DetailField {
+  /** どの項目か。メモだけタグを切り分けて出すので、ラベル文字列では判定しない。 */
+  key: DetailFieldKey;
+  /** 項目名。 */
+  label: string;
+  /** 値。空の項目は組み立ての時点で落とすので、必ず中身がある。 */
+  value: string;
+}
+
+/** 種別の表示名。Zaim が返す `mode` をそのまま出すと英語だけが並ぶ。 */
+const MODE_LABELS: Record<string, string> = {
+  payment: "支出",
+  income: "収入",
+  transfer: "振替",
+};
+
+/**
+ * 種別の表示名を返す。
+ *
+ * 知らない種別はそのまま返す。Zaim が種別を増やしたとき、空欄になるより
+ * 原文が見えた方が手がかりになる。
+ *
+ * @param mode Zaim の `mode`。
+ * @returns 表示名。
+ */
+export function modeLabel(mode: string): string {
+  return MODE_LABELS[mode] ?? mode;
+}
+
+/**
+ * 明細の詳細に出す項目を組み立てる。
+ *
+ * 一覧の `rowText` と違い、フォールバックも省略もしない。切れた主表示の
+ * 全文を読むのがこの表示の目的なので、店舗・品名・メモを畳まず別々に出す。
+ *
+ * 項目は Zaim の更新 API が受け付けるものに合わせてある。工程 ③ でこの表示が
+ * 編集フォームになったとき、読める項目と直せる項目がずれないようにするため。
+ * ただし日付・金額・種別はここには含めない。値が 1 つに定まる（自由入力でない）
+ * ぶん見出しで出した方が読めるので、シート側が扱う。
+ *
+ * 口座は種別で分岐しない。実データでは支出に出金元だけ、収入に入金先だけ、
+ * 振替に両方が入っており、関係の無い側は必ず空になる（本番の全 4,370 件で確認）。
+ *
+ * @param tx 明細。
+ * @returns 中身のある項目だけを、表示順に並べたもの。
+ */
+export function detailFields(tx: Transaction): DetailField[] {
+  const candidates: [DetailFieldKey, string, string | null][] = [
+    // 切れて読めなかったのはこの 3 つなので先に置く
+    ["place", "店舗", tx.place],
+    ["name", "品名", tx.name],
+    ["comment", "メモ", tx.comment],
+    ["category", "カテゴリ", tx.category],
+    ["genre", "ジャンル", tx.genre],
+    ["from_account", "出金元", tx.from_account],
+    ["to_account", "入金先", tx.to_account],
+  ];
+
+  return candidates.flatMap(([key, label, value]) => {
+    const cleaned = clean(value);
+    return cleaned === null ? [] : [{ key, label, value: cleaned }];
+  });
+}
+
+/** メモを平文とタグに切り分けた一片。 */
+export interface CommentSegment {
+  /** 表示する文字列。タグなら先頭の `#` を含む。 */
+  text: string;
+  /** タグか。 */
+  tag: boolean;
+}
+
+/**
+ * タグ。`#` から空白までを 1 つと見なす。
+ *
+ * 実データのタグはすべて ASCII の `#` で、全角の `＃` は 0 件だった
+ * （メモのある 3,959 件のうち 3,877 件がタグを含む）。`\S` は全角空白も
+ * 区切りとして扱う。
+ */
+const TAG_PATTERN = /#\S+/g;
+
+/**
+ * メモを平文とタグに切り分ける。
+ *
+ * `RTK LINE PAY 31-03-31 #MUFG取込 #振替変換待ち` のように、平文のあとに
+ * タグが複数続く形が実データにある。タグは自動連携の出どころや処理待ちを
+ * 表しており、平文と同じ見た目だと埋もれる。
+ *
+ * 空白は平文の側に残す。タグの前後の間隔を表示側で作り直さずに済ませるため。
+ *
+ * @param comment メモ。
+ * @returns 出現順に並べた一片。メモが空なら空配列。
+ */
+export function commentSegments(comment: string): CommentSegment[] {
+  const segments: CommentSegment[] = [];
+  let index = 0;
+
+  for (const match of comment.matchAll(TAG_PATTERN)) {
+    if (match.index > index) {
+      segments.push({ text: comment.slice(index, match.index), tag: false });
+    }
+    segments.push({ text: match[0], tag: true });
+    index = match.index + match[0].length;
+  }
+
+  if (index < comment.length) {
+    segments.push({ text: comment.slice(index), tag: false });
+  }
+  return segments;
+}
+
 /** 同じ日付の明細のまとまり。 */
 export interface DateGroup {
   /** `YYYY-MM-DD` 形式の日付。 */

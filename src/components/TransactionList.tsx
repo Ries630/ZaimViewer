@@ -28,6 +28,8 @@ interface TransactionListProps {
   isFetchingNextPage: boolean;
   /** 続きの取得を促す。 */
   onLoadMore: () => void;
+  /** 明細の詳細を開く。 */
+  onSelect: (transaction: Transaction) => void;
 }
 
 /**
@@ -45,6 +47,7 @@ export function TransactionList({
   hasNextPage,
   isFetchingNextPage,
   onLoadMore,
+  onSelect,
 }: TransactionListProps) {
   if (error) {
     return <p className="py-8 text-center text-error">読み込めなかった: {error.message}</p>;
@@ -90,7 +93,7 @@ export function TransactionList({
           <ol className="divide-y divide-base-200">
             {group.items.map((transaction) => (
               <li key={transaction.id}>
-                <TransactionRow transaction={transaction} today={today} />
+                <TransactionRow transaction={transaction} today={today} onSelect={onSelect} />
               </li>
             ))}
           </ol>
