@@ -91,12 +91,52 @@ describe("rowText", () => {
     expect(text.context).toBe("Salary · みんなの銀行");
   });
 
-  it("振替の文脈は口座の移動", () => {
+  it("振替は口座の移動が主表示になる", () => {
     const text = rowText(
       transaction({ mode: "transfer", from_account: "MetaMask", to_account: "Grvt" }),
     );
-    expect(text.primary).toBe("MetaMask → Grvt");
-    expect(text.context).toBeNull();
+    expect(text).toEqual({ primary: "MetaMask → Grvt", context: null, note: null });
+  });
+
+  it("振替はメモがあっても口座の移動が主表示のまま", () => {
+    // メモに主表示を譲ると、メモの有無で口座が 1 行目と 2 行目を行き来する。
+    // 実データの振替のメモはほぼ全件が取り込み元のタグで、譲る相手ではない（#34）
+    const text = rowText(
+      transaction({
+        mode: "transfer",
+        from_account: "MetaMask",
+        to_account: "Triaカード残高",
+        comment: "RTK ﾍﾟｲﾍﾟｲ #MUFG取込",
+      }),
+    );
+    expect(text).toEqual({
+      primary: "MetaMask → Triaカード残高",
+      context: null,
+      note: "RTK ﾍﾟｲﾍﾟｲ #MUFG取込",
+    });
+  });
+
+  it("振替の店舗名・品名は文脈に回る", () => {
+    // 実データでは 41 件が持っており、口座名と重複するか補足的な内容だった
+    const text = rowText(
+      transaction({
+        mode: "transfer",
+        place: "Amazon.co.jp",
+        name: "Amazonギフトカード チャージタイプ",
+        from_account: "みんなの銀行",
+        to_account: "Amazonギフト券",
+      }),
+    );
+    expect(text).toEqual({
+      primary: "みんなの銀行 → Amazonギフト券",
+      context: "Amazon.co.jp / Amazonギフトカード チャージタイプ",
+      note: null,
+    });
+  });
+
+  it("振替は口座名が引けなくても主表示を空にしない", () => {
+    const text = rowText(transaction({ mode: "transfer" }));
+    expect(text.primary).toBe("? → ?");
   });
 
   it("三つとも空なら文脈を主表示に上げる", () => {
