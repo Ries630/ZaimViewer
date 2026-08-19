@@ -233,6 +233,16 @@ describe("shortAccountName", () => {
     expect(shortAccountName("お土産 山田商店")).toBe("お土産 山田商店");
     expect(shortAccountName("へそくり 普通")).toBe("へそくり 普通");
   });
+
+  it("素の数字は伏字の番号と見なさない", () => {
+    expect(shortAccountName("サブ口座 2")).toBe("サブ口座 2");
+  });
+
+  it("アスタリスクだけ・1 個だけのトークンは伏字の番号と見なさない", () => {
+    // 実データの伏字は 4〜5 個 + 3 桁。3 個以上 + 数字必須まで締めてある
+    expect(shortAccountName("メモ ***")).toBe("メモ ***");
+    expect(shortAccountName("MetaMask *2")).toBe("MetaMask *2");
+  });
 });
 
 describe("groupByDate", () => {
