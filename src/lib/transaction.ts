@@ -11,9 +11,9 @@ import type { Transaction } from "../api/transactions";
 
 /** 明細 1 件の表示テキスト。 */
 export interface RowText {
-  /** 主表示。店舗名・品名、無ければメモ、それも無ければ文脈。 */
+  /** 主表示。店舗名・品名、無ければメモ、それも無ければ文脈。振替は口座の移動で固定。 */
   primary: string;
-  /** 副表示。カテゴリ・ジャンル・口座。主表示に昇格したときは null。 */
+  /** 副表示。カテゴリ・ジャンル・口座。振替では店舗名・品名。無ければ null。 */
   context: string | null;
   /** 補足。主表示に使わなかったメモ。 */
   note: string | null;
@@ -36,31 +36,112 @@ function clean(value: string | null): string | null {
 }
 
 /**
+ * 口座名の末尾に付く種別。
+ *
+ * 銀行の口座名は Zaim 側で「<銀行> <支店> <種別> <番号>」の並びになる。
+ * ここに無い種別は知らないものとして扱い、短縮せずそのまま出す。
+ */
+const ACCOUNT_TYPES = new Set(["普通", "総合", "当座", "貯蓄", "定期", "定額定期", "残高別普通"]);
+
+/**
+ * 伏字の口座番号（`****430`、`*****725`）。
+ *
+ * アスタリスク 3 個以上 + 数字 1 桁以上に限る。実データは 4〜5 個 + 3 桁。
+ * `\*+\d*` まで緩めると `***`（数字なし）や `*2`（ニックネームの連番）が
+ * 番号扱いになり、門番を素通りして短縮が誤爆する。
+ */
+const MASKED_NUMBER = /^\*{3,}\d+$/;
+
+/**
+ * 口座名を一覧向けに短縮する。
+ *
+ * 一覧で見たいのは銀行名までで、支店・種別・番号は場所を食うだけになる。
+ * 本番の口座 36 件のうち、この規則が実際に効くのは銀行口座の 4 件だけで、
+ * 残りはニックネーム（`Triaカード残高`、`三井住友カード Olive`）なので素通りする。
+ *
+ * **伏字の番号で終わる名前だけを銀行口座の形と見なす。** 番号は人が付ける
+ * ニックネームには現れない、この形式の署名にあたるトークンで、これを門に
+ * すると「〇〇商店」のようなニックネームに `店` の条件が誤って当たる余地が
+ * なくなる。誤爆（間違った短縮）は騙されるまで気付けないが、未適用
+ * （長いまま出る）は見れば分かるので、失敗は必ず未適用の側に倒す。
+ *
+ * **末尾から順に落とす。** 先頭から取る方式にすると `三菱 UFJ 銀行` が
+ * `三菱` になってしまう（銀行名自体が空白を含む）。
+ * 短縮の結果が空にならないよう、トークンは必ず 1 つ残す。
+ *
+ * @param name 口座名。
+ * @returns 短縮した口座名。銀行口座の形でなければそのまま。
+ */
+export function shortAccountName(name: string): string {
+  const tokens = name.split(/\s+/).filter((token) => token !== "");
+
+  // 門番。番号で終わらない名前には一切触れない
+  if (tokens.length < 2 || !MASKED_NUMBER.test(tokens.at(-1) ?? "")) return name;
+  tokens.pop();
+
+  // 「<銀行> <支店> <種別> <番号>」の並びなので、末尾から剥がすと銀行名が残る
+  while (tokens.length > 1) {
+    const last = tokens[tokens.length - 1] ?? "";
+    if (!ACCOUNT_TYPES.has(last) && !last.endsWith("店")) break;
+    tokens.pop();
+  }
+  return tokens.join(" ");
+}
+
+/**
+ * 振替の口座の移動を組み立てる。
+ *
+ * 振替はカテゴリもジャンルも持たないので、これが明細の中身そのものになる。
+ * 口座名が引けなくても穴を空けず `?` を置く。片側だけ消えた振替は
+ * 「どこかへ移した」という情報自体が残らないと読めないため。
+ *
+ * @param tx 振替の明細。
+ * @returns 「A → B」の文字列。
+ */
+function accountMovement(tx: Transaction): string {
+  const from = tx.from_account ?? "?";
+  const to = tx.to_account ?? "?";
+  const shortFrom = shortAccountName(from);
+  const shortTo = shortAccountName(to);
+
+  // 短縮すると同名になる口座がある（ゆうちょ銀行 三一八店の「総合」と「定額定期」）。
+  // 「A → A」は何も言っていないので、その組み合わせのときだけ正式名に戻す
+  return shortFrom === shortTo ? `${from} → ${to}` : `${shortFrom} → ${shortTo}`;
+}
+
+/**
  * 明細の文脈（何に・どの口座で）を組み立てる。
  *
- * 振替はカテゴリを持たないので、口座の移動そのものが文脈になる。
+ * 振替は `rowText` が先に処理するのでここには来ない。口座の移動は
+ * 文脈ではなく主表示になる（`accountMovement`）。
  *
- * @param tx 明細。
+ * 口座名は `shortAccountName` で短縮する。振替の主表示と同じ規則にしないと、
+ * 同じ口座が行によって違う名前で出る。
+ *
+ * @param tx 支出または収入の明細。
  * @returns 文脈の文字列。組み立てられなければ null。
  */
 function contextOf(tx: Transaction): string | null {
-  if (tx.mode === "transfer") {
-    return `${tx.from_account ?? "?"} → ${tx.to_account ?? "?"}`;
-  }
   // 支出は出金元、収入は入金先に口座が入る
-  const account = tx.mode === "income" ? tx.to_account : tx.from_account;
-  const parts = [tx.category, tx.genre, account].map(clean).filter((part) => part !== null);
+  const account = clean(tx.mode === "income" ? tx.to_account : tx.from_account);
+  const parts = [
+    clean(tx.category),
+    clean(tx.genre),
+    account === null ? null : shortAccountName(account),
+  ].filter((part) => part !== null);
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 /**
  * 明細の表示テキストを組み立てる。
  *
+ * 支出・収入と振替で規則が違う。振替には店舗に当たるものが無く、
+ * 口座の移動が明細の中身そのものだから（#34）。
+ *
  * @param tx 明細。
  * @returns 主表示・文脈・補足。
  */
 export function rowText(tx: Transaction): RowText {
-  const context = contextOf(tx);
   const comment = clean(tx.comment);
 
   // 店舗名と品名は「Microsoft の Azure」のように両方が意味を持つので、
@@ -70,6 +151,15 @@ export function rowText(tx: Transaction): RowText {
     .filter((part) => part !== null)
     .join(" / ");
 
+  // 振替は口座の移動を主表示に固定する。下の規則に通すと、振替の `place` と
+  // `name` はほぼ空（495 件中 454 件）なのでメモの有無が分かれ目になり、
+  // 口座が 1 行目と 2 行目を行き来する。しかも振替のメモはほぼ全件が
+  // 取り込み元のタグ（`#MUFG取込` など）で、主表示を譲る相手ではない
+  if (tx.mode === "transfer") {
+    return { primary: accountMovement(tx), context: label || null, note: comment };
+  }
+
+  const context = contextOf(tx);
   if (label) return { primary: label, context, note: comment };
   if (comment) return { primary: comment, context, note: null };
   // 家賃の繰り返し登録のように 3 つとも空の行がある。
