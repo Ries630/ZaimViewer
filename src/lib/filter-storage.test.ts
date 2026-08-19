@@ -70,6 +70,15 @@ describe("parseStoredFilter", () => {
     expect(parsed.categoryIds).toEqual([101, 104]);
   });
 
+  it("除外する店舗から空文字を落とす", () => {
+    const parsed = parseStoredFilter(stored({ excludePlaces: ["ヨドバシ", "", "  "] }));
+    expect(parsed.excludePlaces).toEqual(["ヨドバシ", "  "]);
+  });
+
+  it("整数でない金額は受け付けない", () => {
+    expect(parseStoredFilter(stored({ amountMin: 3.5 })).amountMin).toBeNull();
+  });
+
   it("知らない期間プリセットは既定に倒す", () => {
     expect(parseStoredFilter(stored({ period: "last-week" })).period).toBe(DEFAULT_FILTER.period);
   });

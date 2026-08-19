@@ -21,7 +21,10 @@
     "anti-slop/no-reflect-apply": "error",
     "anti-slop/no-module-mocking": "error",
     "anti-slop/no-known-value-widening": "error",
-    "anti-slop/require-safety-comment-for-type-assertion": "error"
+    "anti-slop/require-safety-comment-for-type-assertion": "error",
+    "anti-slop/no-unknown-parameters": "error",
+    // 型述語関数（`value is Foo`）の中は許す。既定はそこまで禁じる
+    "anti-slop/no-runtime-typeof": ["error", { "allowInTypeGuards": true }]
   },
   "env": {
     "builtin": true
@@ -29,10 +32,16 @@
   "ignorePatterns": ["worker-configuration.d.ts", ".claude/**", "tools/oxlint/anti-slop/**"],
   "overrides": [
     {
-      // テストの `as` はレスポンスの形を書き下しているだけで、根拠コメントを
-      // 足しても情報が増えない（ADR-0032）
+      // テストは未検証の入力を意図的に組み立てる場所なので、境界のルールは
+      // 本番コードの側だけに掛ける。`as` はレスポンスの形を書き下しているだけで
+      // 根拠コメントを足しても情報が増えず、`unknown` の引数と `typeof` の分岐は
+      // 壊れた値を渡すという題材そのもの（ADR-0032）
       "files": ["worker/test/**", "**/*.test.ts", "**/*.test.tsx"],
-      "rules": { "anti-slop/require-safety-comment-for-type-assertion": "off" }
+      "rules": {
+        "anti-slop/require-safety-comment-for-type-assertion": "off",
+        "anti-slop/no-unknown-parameters": "off",
+        "anti-slop/no-runtime-typeof": "off"
+      }
     }
   ]
 }
