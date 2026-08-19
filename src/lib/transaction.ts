@@ -36,6 +36,46 @@ function clean(value: string | null): string | null {
 }
 
 /**
+ * 口座名の末尾に付く種別。
+ *
+ * 銀行の口座名は Zaim 側で「<銀行> <支店> <種別> <番号>」の並びになる。
+ * ここに無い種別は知らないものとして扱い、短縮せずそのまま出す。
+ */
+const ACCOUNT_TYPES = new Set(["普通", "総合", "当座", "貯蓄", "定期", "定額定期", "残高別普通"]);
+
+/** 伏字の口座番号（`****430`、`*****725`）。 */
+const MASKED_NUMBER = /^\*+\d*$/;
+
+/**
+ * 口座名を一覧向けに短縮する。
+ *
+ * 一覧で見たいのは銀行名までで、支店・種別・番号は場所を食うだけになる。
+ * 本番の口座 36 件のうち、この規則が実際に効くのは銀行口座の 4 件だけで、
+ * 残りはニックネーム（`Triaカード残高`、`三井住友カード Olive`）なので素通りする。
+ *
+ * **末尾から順に落とす。** 先頭から取る方式にすると `三菱 UFJ 銀行` が
+ * `三菱` になってしまう（銀行名自体が空白を含む）。
+ *
+ * 短縮の結果が空にならないよう、トークンは必ず 1 つ残す。知らない形式の
+ * 名前には何もしないので、規則が当たらなくても現状表示に倒れるだけで済む。
+ *
+ * @param name 口座名。
+ * @returns 短縮した口座名。
+ */
+export function shortAccountName(name: string): string {
+  const tokens = name.split(/\s+/).filter((token) => token !== "");
+
+  while (tokens.length > 1) {
+    const last = tokens[tokens.length - 1] ?? "";
+    // 番号 → 種別 → 支店 の順に現れるので、末尾から剥がすと銀行名が残る
+    const droppable = MASKED_NUMBER.test(last) || ACCOUNT_TYPES.has(last) || last.endsWith("店");
+    if (!droppable) break;
+    tokens.pop();
+  }
+  return tokens.join(" ");
+}
+
+/**
  * 振替の口座の移動を組み立てる。
  *
  * 振替はカテゴリもジャンルも持たないので、これが明細の中身そのものになる。
@@ -46,7 +86,14 @@ function clean(value: string | null): string | null {
  * @returns 「A → B」の文字列。
  */
 function accountMovement(tx: Transaction): string {
-  return `${tx.from_account ?? "?"} → ${tx.to_account ?? "?"}`;
+  const from = tx.from_account ?? "?";
+  const to = tx.to_account ?? "?";
+  const shortFrom = shortAccountName(from);
+  const shortTo = shortAccountName(to);
+
+  // 短縮すると同名になる口座がある（ゆうちょ銀行 三一八店の「総合」と「定額定期」）。
+  // 「A → A」は何も言っていないので、その組み合わせのときだけ正式名に戻す
+  return shortFrom === shortTo ? `${from} → ${to}` : `${shortFrom} → ${shortTo}`;
 }
 
 /**
@@ -55,13 +102,20 @@ function accountMovement(tx: Transaction): string {
  * 振替は `rowText` が先に処理するのでここには来ない。口座の移動は
  * 文脈ではなく主表示になる（`accountMovement`）。
  *
+ * 口座名は `shortAccountName` で短縮する。振替の主表示と同じ規則にしないと、
+ * 同じ口座が行によって違う名前で出る。
+ *
  * @param tx 支出または収入の明細。
  * @returns 文脈の文字列。組み立てられなければ null。
  */
 function contextOf(tx: Transaction): string | null {
   // 支出は出金元、収入は入金先に口座が入る
-  const account = tx.mode === "income" ? tx.to_account : tx.from_account;
-  const parts = [tx.category, tx.genre, account].map(clean).filter((part) => part !== null);
+  const account = clean(tx.mode === "income" ? tx.to_account : tx.from_account);
+  const parts = [
+    clean(tx.category),
+    clean(tx.genre),
+    account === null ? null : shortAccountName(account),
+  ].filter((part) => part !== null);
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
