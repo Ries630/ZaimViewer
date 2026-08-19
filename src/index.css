@@ -2,7 +2,7 @@
 
 /* 文書を走査対象から外す。Tailwind は既定でリポジトリ全体を見るので、ADR や
    AGENTS.md が地の文で書いたクラス名（`text-gray-500` など、実装では使っていない）を
-   拾ってビルドに混ぜてしまう。指示ファイルをリネームしたらここも直すこと */
+   拾ってビルドに混ぜてしまう */
 @source not "../docs";
 @source not "../AGENTS.md";
 @source not "../README.md";
