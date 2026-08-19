@@ -6,14 +6,12 @@
  *
  * **復元は項目ごとに検証し、読めない項目だけ既定値に倒す。** 保存形式は
  * これから増える見込みで、丸ごと捨てる作り方だと項目を 1 つ足すたびに
- * 利用者の設定が消える。項目ごとの `z.catch` がその「倒す」を担う。
+ * 利用者の設定が消える。項目ごとの `v.fallback` がその「倒す」を担う。
  *
- * 検証は `zod/mini` で書く。手書きの `typeof` ガードから移した理由と、
- * 通常の `zod` ではなく mini を選んだ測定値は
- * [ADR-0033](../../docs/adr/0033-zod-mini-for-client-parsing.md) にある。
+ * 検証は valibot で書く（[ADR-0034](../../docs/adr/0034-valibot-for-validation.md)）。
  */
 
-import * as z from "zod/mini";
+import * as v from "valibot";
 
 import { MAX_AMOUNT } from "../../worker/src/limits";
 import { DEFAULT_FILTER, type FilterState, MODES, type Mode } from "./filter";
@@ -39,20 +37,31 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
  *
  * 配列ごと捨てないのは、異物 1 つで選んだカテゴリが全部消えるのを避けるため。
  *
+ * **`v.fallback` はここには置かない。** valibot の fallback は効いた時点で
+ * pipe を打ち切るので、中に挟むと後段の transform が走らなくなる。
+ * 「配列でなければ空」は呼び出し側でフィールド全体を包んで表す。
+ *
  * @param item 中身の検証に使うスキーマ。
- * @returns 通った要素だけを残すスキーマ。配列でなければ空になる。
+ * @returns 通った要素だけを残すスキーマ。
  */
-function sieve<T>(item: z.ZodMiniType<T>) {
-  return z.pipe(
-    z.catch(z.array(z.unknown()), []),
-    z.transform((items: unknown[]) =>
+function sieve<T>(item: v.GenericSchema<unknown, T>) {
+  return v.pipe(
+    v.array(v.unknown()),
+    v.transform((items) =>
       items.flatMap((candidate) => {
-        const result = item.safeParse(candidate);
-        return result.success ? [result.data] : [];
+        const result = v.safeParse(item, candidate);
+        return result.success ? [result.output] : [];
       }),
     ),
   );
 }
+
+/**
+ * 整数の配列。配列でなければ空に倒す。
+ *
+ * @returns カテゴリ ID などの配列を読むスキーマ。
+ */
+const intArray = () => v.fallback(sieve(v.pipe(v.number(), v.safeInteger())), []);
 
 /**
  * 金額。
@@ -60,10 +69,13 @@ function sieve<T>(item: z.ZodMiniType<T>) {
  * 上限を超えた値は落とす。API が 400 を返す値が保存に残っていると、
  * 起動しただけで一覧が出ない状態になる。
  */
-const amount = z.catch(z.nullable(z.int().check(z.minimum(0), z.maximum(MAX_AMOUNT))), null);
+const amount = v.fallback(
+  v.nullable(v.pipe(v.number(), v.safeInteger(), v.minValue(0), v.maxValue(MAX_AMOUNT))),
+  null,
+);
 
 /** 日付。書式が合わなければ null。 */
-const date = z.catch(z.nullable(z.string().check(z.regex(DATE_PATTERN))), null);
+const date = v.fallback(v.nullable(v.pipe(v.string(), v.regex(DATE_PATTERN))), null);
 
 /**
  * 種別。
@@ -72,34 +84,37 @@ const date = z.catch(z.nullable(z.string().check(z.regex(DATE_PATTERN))), null);
  * 0 個の状態を送ると意図と逆に全件が出る。並びは保存された順ではなく
  * `MODES` の表示順に揃える。
  */
-const modes = z.pipe(
-  sieve<Mode>(z.enum(MODES.map((mode) => mode.value))),
-  z.transform((saved: Mode[]) => {
-    const ordered = MODES.map((mode) => mode.value).filter((mode) => saved.includes(mode));
-    return ordered.length > 0 ? ordered : DEFAULT_FILTER.modes;
-  }),
+const modes = v.fallback(
+  v.pipe(
+    sieve<Mode>(v.picklist(MODES.map((mode) => mode.value))),
+    v.transform((saved) => {
+      const ordered = MODES.map((mode) => mode.value).filter((mode) => saved.includes(mode));
+      return ordered.length > 0 ? ordered : DEFAULT_FILTER.modes;
+    }),
+  ),
+  DEFAULT_FILTER.modes,
 );
 
 /**
  * 保存されているフィルタ状態。
  *
- * 項目ごとに `z.catch` を持たせてあるので、この object が失敗するのは
+ * 項目ごとに `v.fallback` を持たせてあるので、この object が失敗するのは
  * オブジェクトでない値を渡されたときだけになる。知らないキーは落とす。
  */
-const StoredFilter = z.object({
-  period: z.catch(z.enum(PERIODS), DEFAULT_FILTER.period),
+const StoredFilter = v.object({
+  period: v.fallback(v.picklist(PERIODS), DEFAULT_FILTER.period),
   dateFrom: date,
   dateTo: date,
-  hideFuture: z.catch(z.boolean(), DEFAULT_FILTER.hideFuture),
+  hideFuture: v.fallback(v.boolean(), DEFAULT_FILTER.hideFuture),
   modes,
-  categoryIds: sieve(z.int()),
-  genreIds: sieve(z.int()),
-  accountIds: sieve(z.int()),
+  categoryIds: intArray(),
+  genreIds: intArray(),
+  accountIds: intArray(),
   amountMin: amount,
   amountMax: amount,
-  q: z.catch(z.string(), DEFAULT_FILTER.q),
-  excludePlaces: sieve(z.string().check(z.minLength(1))),
-  excludeGenreIds: sieve(z.int()),
+  q: v.fallback(v.string(), DEFAULT_FILTER.q),
+  excludePlaces: v.fallback(sieve(v.pipe(v.string(), v.minLength(1))), []),
+  excludeGenreIds: intArray(),
 });
 
 /**
@@ -112,8 +127,8 @@ export function parseStoredFilter(raw: string | null): FilterState {
   if (raw === null) return DEFAULT_FILTER;
 
   try {
-    const result = StoredFilter.safeParse(JSON.parse(raw));
-    return result.success ? result.data : DEFAULT_FILTER;
+    const result = v.safeParse(StoredFilter, JSON.parse(raw));
+    return result.success ? result.output : DEFAULT_FILTER;
   } catch {
     // JSON として壊れている
     return DEFAULT_FILTER;

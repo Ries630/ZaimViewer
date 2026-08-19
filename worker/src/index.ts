@@ -8,10 +8,10 @@
  * 収まらないため、手元から `scripts/sync.ts` を実行する（ADR-0015）。
  */
 
-import { zValidator } from "@hono/zod-validator";
+import { vValidator } from "@hono/valibot-validator";
 import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
-import { z } from "zod";
+import * as v from "valibot";
 
 import { type AccessEnv, accessGuard } from "./access";
 import { MAX_AMOUNT, MAX_QUERY_BYTES, withinQueryByteLimit } from "./limits";
@@ -66,38 +66,67 @@ function credentialsOf(env: Env): OAuth1Credentials {
  * @param item 各要素のスキーマ。
  * @returns 配列に正規化するスキーマ。
  */
-function repeatable<T extends z.ZodType>(item: T) {
-  return z.preprocess(
-    (value) => (value === undefined ? undefined : Array.isArray(value) ? value : [value]),
-    z.array(item).optional(),
+function repeatable<T extends v.GenericSchema>(item: T) {
+  // `v.optional` で包むのは、未指定のときに配列化を走らせないため。
+  // 中で分岐すると `[undefined]` になり、要素の検証で落ちる
+  return v.optional(
+    v.pipe(
+      v.unknown(),
+      v.transform((value) => (Array.isArray(value) ? value : [value])),
+      v.array(item),
+    ),
   );
 }
+
+/**
+ * クエリ文字列の整数。
+ *
+ * クエリは必ず文字列で届くので、数値に直してから整数か確かめる。valibot には
+ * `z.coerce.number()` に当たる入口が無いぶん、変換を pipe に書き下す。
+ *
+ * **`v.integer()` ではなく `v.safeInteger()` を使う。** 前者は
+ * `Number.isInteger` そのままで、`9007199254740993`（丸められて整数になる）も
+ * `1e30` も通してしまう。zod の `.int()` は安全な整数の範囲で弾いていたので、
+ * ここを合わせないと桁あふれした値が SQL に渡る。
+ *
+ * @returns 文字列を整数に直すスキーマ。
+ */
+const coercedInt = () => v.pipe(v.string(), v.transform(Number), v.number(), v.safeInteger());
 
 /**
  * 明細一覧のクエリパラメータ。
  *
  * すべてのフィルタは未指定なら条件を課さない。「振替を除外」「今日以前だけ」
  * といった既定は API 側に持たせず、呼び出し側（PWA）が明示する。
+ *
+ * `limit` と `offset` の既定値が文字列なのは、`v.optional` の第 2 引数が
+ * 変換前（= クエリ文字列）の型で渡す約束になっているため。
  */
-const transactionQuery = z.object({
-  date_from: z.string().regex(DATE_PATTERN).optional(),
-  date_to: z.string().regex(DATE_PATTERN).optional(),
-  mode: repeatable(z.string()),
-  category_id: repeatable(z.coerce.number().int()),
-  genre_id: repeatable(z.coerce.number().int()),
-  account_id: repeatable(z.coerce.number().int()),
-  amount_min: z.coerce.number().int().min(0).max(MAX_AMOUNT).optional(),
-  amount_max: z.coerce.number().int().min(0).max(MAX_AMOUNT).optional(),
-  q: z
-    .string()
-    .refine(withinQueryByteLimit, {
-      message: `キーワードは UTF-8 で ${MAX_QUERY_BYTES} バイト以内（D1 の LIKE パターン長制限）`,
-    })
-    .optional(),
-  exclude_place: repeatable(z.string()),
-  exclude_genre_id: repeatable(z.coerce.number().int()),
-  limit: z.coerce.number().int().min(1).max(MAX_LIMIT).default(DEFAULT_LIMIT),
-  offset: z.coerce.number().int().min(0).default(0),
+const transactionQuery = v.object({
+  date_from: v.optional(v.pipe(v.string(), v.regex(DATE_PATTERN))),
+  date_to: v.optional(v.pipe(v.string(), v.regex(DATE_PATTERN))),
+  mode: repeatable(v.string()),
+  category_id: repeatable(coercedInt()),
+  genre_id: repeatable(coercedInt()),
+  account_id: repeatable(coercedInt()),
+  amount_min: v.optional(v.pipe(coercedInt(), v.minValue(0), v.maxValue(MAX_AMOUNT))),
+  amount_max: v.optional(v.pipe(coercedInt(), v.minValue(0), v.maxValue(MAX_AMOUNT))),
+  q: v.optional(
+    v.pipe(
+      v.string(),
+      v.check(
+        withinQueryByteLimit,
+        `キーワードは UTF-8 で ${MAX_QUERY_BYTES} バイト以内（D1 の LIKE パターン長制限）`,
+      ),
+    ),
+  ),
+  exclude_place: repeatable(v.string()),
+  exclude_genre_id: repeatable(coercedInt()),
+  limit: v.optional(
+    v.pipe(coercedInt(), v.minValue(1), v.maxValue(MAX_LIMIT)),
+    String(DEFAULT_LIMIT),
+  ),
+  offset: v.optional(v.pipe(coercedInt(), v.minValue(0)), "0"),
 });
 
 const app = new Hono<{ Bindings: Env }>();
@@ -125,7 +154,7 @@ const routes = app
    * 件数と金額合計も併せて返す。件数はページャに、合計は
    * 「この条件で総額いくらか」の確認に使う。
    */
-  .get("/api/transactions", zValidator("query", transactionQuery), async (c) => {
+  .get("/api/transactions", vValidator("query", transactionQuery), async (c) => {
     const params = c.req.valid("query");
     const filter: TransactionFilter = {
       dateFrom: params.date_from,

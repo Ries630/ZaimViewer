@@ -73,7 +73,8 @@ AGENTS.md には**結論**だけを置く。毎セッション自動で読み込
 | [0030](0030-receipt-id-gates-name-editing.md) | 品名を編集できるのは `receipt_id` を持つ明細だけとし、持たない既存分には後付けする | 承認済み |
 | [0031](0031-agents-md-as-instruction-source.md) | 指示ファイルを `AGENTS.md` に移し、`CLAUDE.md` はインポートだけにする | 承認済み |
 | [0032](0032-anti-slop-lint-rules.md) | anti-slop の Oxlint プラグインをベンダリングし、ルールを段階的に有効にする | 承認済み |
-| [0033](0033-zod-mini-for-client-parsing.md) | クライアント側の入力検証に `zod/mini` を使う | 承認済み |
+| [0033](0033-zod-mini-for-client-parsing.md) | クライアント側の入力検証に `zod/mini` を使う | 廃止（[0034](0034-valibot-for-validation.md) により置換） |
+| [0034](0034-valibot-for-validation.md) | 入力検証を valibot に一本化する | 承認済み |
 
 ### 未決・進行中
 

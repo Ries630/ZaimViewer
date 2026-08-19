@@ -19,7 +19,7 @@
     "db:init": "bun run worker/scripts/init-schema.ts > .schema.sql && wrangler d1 execute DB --remote --file .schema.sql -y"
   },
   "dependencies": {
-    "@hono/zod-validator": "^0.9.0",
+    "@hono/valibot-validator": "^0.6.1",
     "@tanstack/react-query": "^5.101.4",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.6.0",
@@ -27,7 +27,7 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "temporal-polyfill": "^1.0.3",
-    "zod": "^4.4.3"
+    "valibot": "^1.4.2"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.51.2",
