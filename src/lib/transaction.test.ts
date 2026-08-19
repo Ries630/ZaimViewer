@@ -226,6 +226,13 @@ describe("shortAccountName", () => {
   it("知らない形式には何もしない", () => {
     expect(shortAccountName("よく分からない 口座 名前")).toBe("よく分からない 口座 名前");
   });
+
+  it("伏字の番号で終わらない名前には、店で終わっても触れない", () => {
+    // 番号を門にしているのはこのため。誤爆（間違った短縮）は騙されるまで
+    // 気付けないが、未適用（長いまま出る）は見れば分かる
+    expect(shortAccountName("お土産 山田商店")).toBe("お土産 山田商店");
+    expect(shortAccountName("へそくり 普通")).toBe("へそくり 普通");
+  });
 });
 
 describe("groupByDate", () => {

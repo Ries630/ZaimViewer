@@ -53,23 +53,30 @@ const MASKED_NUMBER = /^\*+\d*$/;
  * 本番の口座 36 件のうち、この規則が実際に効くのは銀行口座の 4 件だけで、
  * 残りはニックネーム（`Triaカード残高`、`三井住友カード Olive`）なので素通りする。
  *
+ * **伏字の番号で終わる名前だけを銀行口座の形と見なす。** 番号は人が付ける
+ * ニックネームには現れない、この形式の署名にあたるトークンで、これを門に
+ * すると「〇〇商店」のようなニックネームに `店` の条件が誤って当たる余地が
+ * なくなる。誤爆（間違った短縮）は騙されるまで気付けないが、未適用
+ * （長いまま出る）は見れば分かるので、失敗は必ず未適用の側に倒す。
+ *
  * **末尾から順に落とす。** 先頭から取る方式にすると `三菱 UFJ 銀行` が
  * `三菱` になってしまう（銀行名自体が空白を含む）。
- *
- * 短縮の結果が空にならないよう、トークンは必ず 1 つ残す。知らない形式の
- * 名前には何もしないので、規則が当たらなくても現状表示に倒れるだけで済む。
+ * 短縮の結果が空にならないよう、トークンは必ず 1 つ残す。
  *
  * @param name 口座名。
- * @returns 短縮した口座名。
+ * @returns 短縮した口座名。銀行口座の形でなければそのまま。
  */
 export function shortAccountName(name: string): string {
   const tokens = name.split(/\s+/).filter((token) => token !== "");
 
+  // 門番。番号で終わらない名前には一切触れない
+  if (tokens.length < 2 || !MASKED_NUMBER.test(tokens.at(-1) ?? "")) return name;
+  tokens.pop();
+
+  // 「<銀行> <支店> <種別> <番号>」の並びなので、末尾から剥がすと銀行名が残る
   while (tokens.length > 1) {
     const last = tokens[tokens.length - 1] ?? "";
-    // 番号 → 種別 → 支店 の順に現れるので、末尾から剥がすと銀行名が残る
-    const droppable = MASKED_NUMBER.test(last) || ACCOUNT_TYPES.has(last) || last.endsWith("店");
-    if (!droppable) break;
+    if (!ACCOUNT_TYPES.has(last) && !last.endsWith("店")) break;
     tokens.pop();
   }
   return tokens.join(" ");
