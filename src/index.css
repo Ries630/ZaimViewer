@@ -1,10 +1,10 @@
 @import "tailwindcss";
 
 /* 文書を走査対象から外す。Tailwind は既定でリポジトリ全体を見るので、ADR や
-   CLAUDE.md が地の文で書いたクラス名（`text-gray-500` など、実装では使っていない）を
-   拾ってビルドに混ぜてしまう */
+   AGENTS.md が地の文で書いたクラス名（`text-gray-500` など、実装では使っていない）を
+   拾ってビルドに混ぜてしまう。指示ファイルをリネームしたらここも直すこと */
 @source not "../docs";
-@source not "../CLAUDE.md";
+@source not "../AGENTS.md";
 @source not "../README.md";
 
 /* 端末の設定に従う。DaisyUI が :root に color-scheme と base-100 / base-content を
