@@ -1,9 +1,11 @@
 @import "tailwindcss";
 
-/* 文書を走査対象から外す。Tailwind は既定でリポジトリ全体を見るので、ADR や
-   AGENTS.md が地の文で書いたクラス名（`text-gray-500` など、実装では使っていない）を
-   拾ってビルドに混ぜてしまう */
+/* 画面を作っていないファイルを走査対象から外す。Tailwind は既定でリポジトリ全体を
+   見るので、ADR や AGENTS.md が地の文で書いたクラス名（`text-gray-500` など、実装では
+   使っていない）を拾ってビルドに混ぜてしまう。tools/ の anti-slop も同じで、ルール名や
+   識別子がクラス名として拾われる（実測 71.73 → 72.28 kB、gzip 12.68 → 12.76 kB） */
 @source not "../docs";
+@source not "../tools";
 @source not "../AGENTS.md";
 @source not "../README.md";
 
