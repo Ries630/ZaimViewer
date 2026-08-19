@@ -101,7 +101,7 @@ PNG は `./scripts/make-icons.sh` で作り直す。
 | クエリ | Drizzle（読み取りのみ） | 列名を型で拾う。ドライバ非依存 |
 | 入力検証 | zod + `@hono/zod-validator` | pydantic 相当 |
 | 型検査 | TypeScript 7（Go 実装） | 同じコードで 0.60 秒 → 0.07 秒 |
-| lint / format | oxlint + oxfmt | `oxlint-tsgolint` で型認識ルールが効く |
+| lint / format | oxlint + oxfmt + anti-slop | `oxlint-tsgolint` で型認識ルールが効く。anti-slop は 11 ルールを段階的に有効化（ADR-0032） |
 | テスト | vitest + `@cloudflare/vitest-pool-workers` | workerd 上で実物の D1 を使う |
 | パッケージ管理 | bun | peer dependency の解決が緩いので、更新時は要注意 |
 | PWA | React + Vite + `@cloudflare/vite-plugin` | Worker と単一の dev サーバで動き、同一オリジンで API を叩ける |
@@ -186,6 +186,8 @@ Safari と Cookie ストアが別で、初回だけ Google のログイン画面
 | Service Worker は静的アセットの precache だけに使い、ナビゲーションと `/api/*` には触らせない | [0028](docs/adr/0028-service-worker-precache-only.md) |
 | 明細の詳細をボトムシートで見せ、そこを工程 ③ の編集の入口にする。一覧の行タップはこれで埋まる | [0029](docs/adr/0029-detail-bottom-sheet-as-edit-entry.md) |
 | 品名を編集できるのは `receipt_id` を持つ明細だけ。持たない既存分には後付けして解消する | [0030](docs/adr/0030-receipt-id-gates-name-editing.md) |
+| 指示ファイルを `AGENTS.md` に移し、`CLAUDE.md` はインポートだけにする | [0031](docs/adr/0031-agents-md-as-instruction-source.md) |
+| anti-slop の Oxlint プラグインをベンダリングし、ルールを段階的に有効にする | [0032](docs/adr/0032-anti-slop-lint-rules.md) |
 
 以下はコードとテストが守っているもので、ADR にはしていない。
 
@@ -306,6 +308,15 @@ Worker のソース・テスト・スクリプトと、その tsconfig 2 つだ�
 ツールチェーンは TypeScript 7（Go 実装）+ oxlint + oxfmt。
 lint は `--type-aware` で動かしており、型情報を要するルール（`no-floating-promises`
 など）も効く。これは `oxlint-tsgolint` が入っていることが前提。
+
+**lint には node 24 が要る。** `tools/oxlint/anti-slop/` にベンダリングした JS プラグインは
+`.ts` のまま読まれ、oxlint はこれを `node` で実行する。node 22.18 未満では型ストリップが
+既定で効かず、`ERR_UNKNOWN_FILE_EXTENSION` で**設定の読み込みごと失敗して 1 件も
+走らない**。CI が `actions/setup-node` で 24 を固定しているのはこのため。
+採用したルールと不採用の理由は [ADR-0032](docs/adr/0032-anti-slop-lint-rules.md) にある。
+**ベンダリングした 19 ファイルは型検査も整形も対象外**なので、更新するときは
+`install.mjs --force` で上書きして diff を読む。`oxlint` と `@oxlint/plugins` は
+プラグイン API で結合しているため、キャレットを付けず同一バージョンに固定する。
 
 **型検査は 3 プログラムに分かれている。** ルートの `tsconfig.json` がクライアント
 （`src/`、DOM の型が要る）、`worker/tsconfig.json` が Worker 本体とテスト、

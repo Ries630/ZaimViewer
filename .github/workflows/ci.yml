@@ -21,6 +21,13 @@ jobs:
         with:
           bun-version: latest
 
+      # anti-slop の Oxlint プラグインは .ts のまま読まれ、Oxlint は node で
+      # 実行する。型ストリップは node 22.18 以降でしか既定で効かないため、
+      # ランナー既定の node に任せると設定の読み込み自体が失敗しうる
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
       - name: 依存関係のインストール
         run: bun install --frozen-lockfile
 

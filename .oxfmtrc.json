@@ -1,6 +1,11 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
-  // Markdown は整形しない。oxfmt は表を桁揃えするが日本語の全角幅を
-  // 勘定しないため、かえってソースが読みにくくなる
-  "ignorePatterns": ["**/*.md"]
+  "ignorePatterns": [
+    // Markdown は整形しない。oxfmt は表を桁揃えするが日本語の全角幅を
+    // 勘定しないため、かえってソースが読みにくくなる
+    "**/*.md",
+    // anti-slop はベンダリングした第三者コード。こちらの書式に合わせると
+    // 上流との diff が取れなくなる
+    "tools/oxlint/anti-slop/**"
+  ]
 }
