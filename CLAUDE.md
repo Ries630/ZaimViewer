@@ -61,6 +61,12 @@ Access セッション切れの検出は `src/api/` にある。**リポジト�
 localStorage に永続化し、URL とは同期しない
 （[ADR-0026](docs/adr/0026-filter-defaults-and-persistence.md)）。
 
+明細の行はボタンで、タップすると詳細のボトムシートが開く
+（[#19](https://github.com/Ries630/ZaimViewer/issues/19)）。一覧では切り詰めている
+店舗・品名・メモを、畳まず折り返して全文で出す。**ここが工程 ③ の単体編集の入口に
+なる**ので、出す項目は Zaim の更新 API が受け付けるものに揃えてある
+（[ADR-0029](docs/adr/0029-detail-bottom-sheet-as-edit-entry.md)）。
+
 **PWA 化: 完了（[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。**
 ホーム画面から standalone で起動し、セッションが切れても再認証して戻れることを
 iPhone で確認済み（「デプロイの前提」参照）。
@@ -178,6 +184,7 @@ Safari と Cookie ストアが別で、初回だけ Google のログイン画面
 | フィルタの既定値（振替除外 + 未来を隠す）と保存先は PWA が持つ。localStorage に永続化し、URL とは同期しない | [0026](docs/adr/0026-filter-defaults-and-persistence.md) |
 | フィルタの選択肢は Zaim の並び（有効なものが先 → 支出・収入 → `sort`）で返す。削除済みは明細から参照されているものだけ残す | [0027](docs/adr/0027-master-options-follow-zaim-order.md) |
 | Service Worker は静的アセットの precache だけに使い、ナビゲーションと `/api/*` には触らせない | [0028](docs/adr/0028-service-worker-precache-only.md) |
+| 明細の詳細をボトムシートで見せ、そこを工程 ③ の編集の入口にする。一覧の行タップはこれで埋まる | [0029](docs/adr/0029-detail-bottom-sheet-as-edit-entry.md) |
 
 以下はコードとテストが守っているもので、ADR にはしていない。
 
@@ -335,11 +342,11 @@ Cloudflare の認証情報（`Account > D1 > Edit` のトークン）が必要
 
 ## 残っている作業
 
-1. 明細の主表示が長いときに全文を読む手段
-   （[#19](https://github.com/Ries630/ZaimViewer/issues/19)）
-2. 工程 ③ の編集プロキシ（`ZaimClient` に更新系メソッドを足すところから）。
+1. 工程 ③ の編集プロキシ（`ZaimClient` に更新系メソッドを足すところから）。
    `wrangler secret put` で Zaim の認証情報を入れるのもここ。同期を Worker の外へ
-   出したので、それまで本番に認証情報は要らない
+   出したので、それまで本番に認証情報は要らない。**着手前に、Zaim の PUT が
+   部分更新か全項目置換かを実データで確かめる**（置換なら、画面に出していない
+   項目を送り忘れた時点で Zaim 側のデータが消える）
 
 ## 運用メモ
 

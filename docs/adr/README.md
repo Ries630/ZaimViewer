@@ -69,6 +69,7 @@ CLAUDE.md には**結論**だけを置く。毎セッション自動で読み込
 | [0026](0026-filter-defaults-and-persistence.md) | フィルタの既定値と保存先を PWA が持ち、localStorage に永続化する | 承認済み |
 | [0027](0027-master-options-follow-zaim-order.md) | フィルタの選択肢は Zaim の並びに従わせ、削除済みは参照されているものだけ残す | 承認済み |
 | [0028](0028-service-worker-precache-only.md) | Service Worker は静的アセットの precache だけに使い、ナビゲーションと `/api/*` には触らせない | 承認済み |
+| [0029](0029-detail-bottom-sheet-as-edit-entry.md) | 明細の詳細をボトムシートで見せ、そこを工程 ③ の編集の入口にする | 承認済み |
 
 ### 未決・進行中
 

@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useMasters } from "./api/masters";
 import { useMeta } from "./api/meta";
-import { useTransactions } from "./api/transactions";
+import { type Transaction, useTransactions } from "./api/transactions";
 import { FilterBar } from "./components/FilterBar";
 import { FilterSheet } from "./components/FilterSheet";
 import { SummaryBar } from "./components/SummaryBar";
 import { SyncFreshness } from "./components/SyncFreshness";
 import { TransactionList } from "./components/TransactionList";
+import { TransactionSheet } from "./components/TransactionSheet";
 import { useDebounced } from "./hooks/useDebounced";
 import { useOnline } from "./hooks/useOnline";
 import { useStoredFilter } from "./hooks/useStoredFilter";
@@ -29,6 +30,8 @@ export function App() {
   const [filter, setFilter] = useStoredFilter();
   const online = useOnline();
   const sheet = useRef<HTMLDialogElement>(null);
+  const detail = useRef<HTMLDialogElement>(null);
+  const [selected, setSelected] = useState<Transaction | null>(null);
 
   // 相対表記の基準。取得し直したときだけ進めれば足りる
   // （ミラーは 1 日 1 回しか更新されないので、秒単位で追う意味が無い）
@@ -65,6 +68,13 @@ export function App() {
 
   // 件数と合計はページごとに同じ値が返るので、先頭のページから読めばよい
   const totals = transactions.data?.pages[0];
+
+  // 選択を先に反映してから開く。同じ描画で処理されるので、
+  // 開く瞬間に前の明細が見えることはない
+  const openDetail = useCallback((transaction: Transaction) => {
+    setSelected(transaction);
+    detail.current?.showModal();
+  }, []);
 
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = transactions;
   const loadMore = useCallback(() => {
@@ -116,8 +126,11 @@ export function App() {
           hasNextPage={hasNextPage}
           isFetchingNextPage={isFetchingNextPage}
           onLoadMore={loadMore}
+          onSelect={openDetail}
         />
       </main>
+
+      <TransactionSheet ref={detail} transaction={selected} today={today} />
 
       <FilterSheet
         ref={sheet}
