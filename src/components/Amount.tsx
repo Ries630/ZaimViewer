@@ -3,13 +3,21 @@
  */
 
 import type { Transaction } from "../api/transactions";
+import type { Mode } from "../lib/filter";
 import { formatAmount } from "../lib/format";
 
-/** モードごとの金額の見せ方。 */
-const AMOUNT_STYLES: Record<string, { className: string; prefix: string }> = {
-  income: { className: "text-success", prefix: "+" },
-  transfer: { className: "text-base-content/60", prefix: "" },
-};
+/**
+ * モードごとの金額の見せ方。支出は既定のままなので持たない。
+ *
+ * `satisfies` で `Mode` 以外のキーを弾いたうえで Map に移している。
+ * 引く側の `transaction.mode` はミラーの値そのままで `string` のため。
+ */
+const AMOUNT_STYLES = new Map(
+  Object.entries({
+    income: { className: "text-success", prefix: "+" },
+    transfer: { className: "text-base-content/60", prefix: "" },
+  } satisfies Partial<Record<Mode, { className: string; prefix: string }>>),
+);
 
 /** 支出および未知のモードの見せ方。 */
 const DEFAULT_AMOUNT_STYLE = { className: "text-base-content", prefix: "" };
@@ -32,7 +40,7 @@ interface AmountProps {
  * @returns 金額の表示。
  */
 export function Amount({ transaction, className = "" }: AmountProps) {
-  const style = AMOUNT_STYLES[transaction.mode] ?? DEFAULT_AMOUNT_STYLE;
+  const style = AMOUNT_STYLES.get(transaction.mode) ?? DEFAULT_AMOUNT_STYLE;
 
   return (
     <span className={`tabular-nums ${style.className} ${className}`}>

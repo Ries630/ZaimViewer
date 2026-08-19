@@ -168,6 +168,8 @@ const routes = app
     const db = drizzle(c.env.DB);
     const rows = await db.select().from(syncMeta);
     const meta = new Map(rows.map((row) => [row.key, row.value]));
+    // SAFETY: counts は同期が `JSON.stringify` で書いた種別ごとの件数で、
+    // 読み書きの両方がこのリポジトリの中にある（`worker/src/sync.ts`）
     return c.json({
       synced_at: meta.get("synced_at") ?? null,
       counts: JSON.parse(meta.get("counts") || "{}") as Record<string, number>,

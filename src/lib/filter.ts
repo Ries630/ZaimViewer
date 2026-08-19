@@ -260,7 +260,7 @@ export function activeBadges(state: FilterState, today: string, names: NameLooku
   if (state.period !== "all" && (range.from !== null || range.to !== null)) {
     const preset = state.period === "custom" ? null : state.period;
     const label = preset
-      ? (PRESET_LABELS[preset] ?? preset)
+      ? (PRESET_LABELS.get(preset) ?? preset)
       : `${range.from ?? ""} 〜 ${range.to ?? ""}`;
     badges.push({
       key: "period",
@@ -342,10 +342,17 @@ export function activeBadges(state: FilterState, today: string, names: NameLooku
   return badges;
 }
 
-/** バッジに出すプリセットの表示名。 */
-const PRESET_LABELS: Partial<Record<PeriodPreset, string>> = {
-  "this-month": "今月",
-  "last-month": "先月",
-  "last-3-months": "過去 3 か月",
-  "this-year": "今年",
-};
+/**
+ * バッジに出すプリセットの表示名。
+ *
+ * `all` と `custom` はバッジに出さないので持たない。`satisfies` で
+ * 綴り違いのキーを弾いたうえで Map に移している。
+ */
+const PRESET_LABELS = new Map(
+  Object.entries({
+    "this-month": "今月",
+    "last-month": "先月",
+    "last-3-months": "過去 3 か月",
+    "this-year": "今年",
+  } satisfies Partial<Record<PeriodPreset, string>>),
+);

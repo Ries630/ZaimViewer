@@ -119,6 +119,8 @@ function asStringArray(value: unknown): string[] {
  */
 function asModes(value: unknown): Mode[] {
   const known = MODES.map((mode) => mode.value);
+  // SAFETY: `Array.isArray` で配列であることを確かめている。narrowing 先が
+  // `any[]` になってしまうので、`unknown[]` に寄せてから引く
   const modes = Array.isArray(value)
     ? known.filter((mode) => (value as unknown[]).includes(mode))
     : [];

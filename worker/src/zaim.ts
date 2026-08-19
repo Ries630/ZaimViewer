@@ -81,6 +81,8 @@ export class ZaimClient {
       const body = await res.text();
       throw new Error(`Zaim API error ${res.status}: ${body.slice(0, 500)}`);
     }
+    // SAFETY: 呼び出し側が Zaim のドキュメントに沿って T を指定する。
+    // ステータスは直前に 200 だけに絞ってある
     return (await res.json()) as T;
   }
 

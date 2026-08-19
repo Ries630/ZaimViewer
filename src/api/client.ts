@@ -55,7 +55,7 @@ export async function unwrap<
   if (!res.ok) {
     throw new Error(`API がエラーを返した（${res.status}）`);
   }
-  // ここを通るのは成功したレスポンスだけだが、`json()` の型は union のまま
-  // なので、SuccessBody で選んだ側に寄せる
+  // SAFETY: 直前の `res.ok` で成功したレスポンスだけに絞ってある。`json()` の型は
+  // union のままなので、SuccessBody で選んだ側に寄せる
   return (await res.json()) as SuccessBody<R>;
 }

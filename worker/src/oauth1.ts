@@ -127,7 +127,7 @@ export async function signRequest(
   options: SignOptions = {},
 ): Promise<SignedRequest> {
   const parsed = new URL(url);
-  const oauthParams: Record<string, string> = {
+  const oauthParams = {
     oauth_consumer_key: credentials.consumerKey,
     oauth_nonce: options.nonce ?? crypto.randomUUID().replace(/-/g, ""),
     oauth_signature_method: "HMAC-SHA1",

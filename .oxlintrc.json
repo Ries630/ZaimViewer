@@ -19,10 +19,20 @@
     "anti-slop/no-object-parameters": "error",
     "anti-slop/no-reflect-get": "error",
     "anti-slop/no-reflect-apply": "error",
-    "anti-slop/no-module-mocking": "error"
+    "anti-slop/no-module-mocking": "error",
+    "anti-slop/no-known-value-widening": "error",
+    "anti-slop/require-safety-comment-for-type-assertion": "error"
   },
   "env": {
     "builtin": true
   },
-  "ignorePatterns": ["worker-configuration.d.ts", ".claude/**", "tools/oxlint/anti-slop/**"]
+  "ignorePatterns": ["worker-configuration.d.ts", ".claude/**", "tools/oxlint/anti-slop/**"],
+  "overrides": [
+    {
+      // テストの `as` はレスポンスの形を書き下しているだけで、根拠コメントを
+      // 足しても情報が増えない（ADR-0032）
+      "files": ["worker/test/**", "**/*.test.ts", "**/*.test.tsx"],
+      "rules": { "anti-slop/require-safety-comment-for-type-assertion": "off" }
+    }
+  ]
 }
