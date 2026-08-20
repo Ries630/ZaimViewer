@@ -2,6 +2,7 @@
  * 種別（支出 / 収入 / 振替）のバッジ。
  */
 
+import type { Mode } from "../lib/filter";
 import { modeLabel } from "../lib/transaction";
 
 /**
@@ -12,11 +13,13 @@ import { modeLabel } from "../lib/transaction";
  * 揃えるため。振替に `info` を使わないのは、同じ見出しに並びうる「予定」の
  * バッジがその色を使っているから。
  */
-const MODE_BADGES: Record<string, string> = {
-  payment: "badge-ghost",
-  income: "badge-success",
-  transfer: "badge-neutral",
-};
+const MODE_BADGES = new Map(
+  Object.entries({
+    payment: "badge-ghost",
+    income: "badge-success",
+    transfer: "badge-neutral",
+  } satisfies Record<Mode, string>),
+);
 
 interface ModeBadgeProps {
   /** Zaim の `mode`。 */
@@ -34,7 +37,7 @@ interface ModeBadgeProps {
  */
 export function ModeBadge({ mode }: ModeBadgeProps) {
   return (
-    <span className={`badge badge-sm ${MODE_BADGES[mode] ?? "badge-ghost"}`}>
+    <span className={`badge badge-sm ${MODE_BADGES.get(mode) ?? "badge-ghost"}`}>
       {modeLabel(mode)}
     </span>
   );

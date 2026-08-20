@@ -101,7 +101,9 @@ async function send(conn: Connection, statements: HttpStatement[]): Promise<D1Qu
       throw new Error(`D1 HTTP API error ${res.status}: ${text.slice(0, 500)}`);
     }
 
-    // HTTP 200 でも SQL エラーは success: false で返る
+    // HTTP 200 でも SQL エラーは success: false で返る。
+    // SAFETY: Cloudflare API の封筒は全エンドポイント共通で、直後に
+    // `success` を見て分岐する。形が違えばそこで落ちる
     const envelope = (await res.json()) as CloudflareEnvelope;
     if (!envelope.success) {
       const detail = envelope.errors.map((e) => `${e.code}: ${e.message}`).join(", ");
@@ -148,6 +150,8 @@ class HttpStatement implements PreparedStatement {
    */
   async all<T = Record<string, unknown>>(): Promise<{ results: T[] }> {
     const [result] = await send(this.#conn, [this]);
+    // SAFETY: 行の形は投げた SQL でしか決まらないので、呼び出し側が T で名乗る。
+    // D1 のバインディングの `all<T>()` と同じ約束（ADR-0011）
     return { results: (result?.results ?? []) as T[] };
   }
 

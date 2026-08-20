@@ -99,7 +99,7 @@ PNG は `./scripts/make-icons.sh` で作り直す。
 | DB | D1 | Workers のネイティブバインディング。認証トークンも外部通信も不要 |
 | フレームワーク | Hono | RPC で PWA と型を共有できる |
 | クエリ | Drizzle（読み取りのみ） | 列名を型で拾う。ドライバ非依存 |
-| 入力検証 | zod + `@hono/zod-validator` | pydantic 相当 |
+| 入力検証 | valibot + `@hono/valibot-validator` | pydantic 相当。Worker とクライアントで同じものを使う（ADR-0034） |
 | 型検査 | TypeScript 7（Go 実装） | 同じコードで 0.60 秒 → 0.07 秒 |
 | lint / format | oxlint + oxfmt + anti-slop | `oxlint-tsgolint` で型認識ルールが効く。anti-slop は 11 ルールを段階的に有効化（ADR-0032） |
 | テスト | vitest + `@cloudflare/vitest-pool-workers` | workerd 上で実物の D1 を使う |
@@ -188,6 +188,7 @@ Safari と Cookie ストアが別で、初回だけ Google のログイン画面
 | 品名を編集できるのは `receipt_id` を持つ明細だけ。持たない既存分には後付けして解消する | [0030](docs/adr/0030-receipt-id-gates-name-editing.md) |
 | 指示ファイルを `AGENTS.md` に移し、`CLAUDE.md` はインポートだけにする | [0031](docs/adr/0031-agents-md-as-instruction-source.md) |
 | anti-slop の Oxlint プラグインをベンダリングし、ルールを段階的に有効にする | [0032](docs/adr/0032-anti-slop-lint-rules.md) |
+| 入力検証は valibot に一本化する。Worker もクライアントも同じ | [0034](docs/adr/0034-valibot-for-validation.md) |
 
 以下はコードとテストが守っているもので、ADR にはしていない。
 
@@ -208,7 +209,9 @@ RPC の型が `typeof app` に積み上がらず、PWA の `hc<AppType>` から�
 （入力欄でそれより前に止める）の両方がそこから import する。依存を持たない別モジュールに
 してあるのが肝で、`index.ts` に置いたまま値として import するとクライアントのバンドルに
 Worker 本体が入る。金額に上限を置いているのは、`<input type="number">` が桁数を
-制限せず、安全な整数（2^53-1）を超えると zod の `.int()` が `too_big` で 400 を返すため。
+制限しないため。上限が無くても `v.safeInteger()` が安全な整数（2^53-1）超えは 400 で
+弾くが、それだけだと 400 の理由が伝わらない。上限を明示することで、400 の理由が
+「桁が大きすぎる」と分かるようにしてある（`worker/test/api.test.ts`）。
 
 **入力欄では `input-sm` を使わない。** daisyUI は iOS Safari 限定
 （`@media (pointer:coarse)` かつ `@supports (-webkit-touch-callout:none)`）で

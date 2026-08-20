@@ -61,8 +61,8 @@ it("上限を超える limit は 400 で弾く", async () => {
 });
 
 it("金額は 9 桁まで受け付け、超えたら 400 で弾く", async () => {
-  // 上限を置かないと、安全な整数（2^53-1）を超えた時点で zod が too_big を返す。
-  // 400 の理由が「桁が大きすぎる」だと分かるよう、明示した上限で弾く
+  // 400 の理由が「桁が大きすぎる」だと分かるよう、明示した上限で弾く。
+  // 上限が無いと、安全な整数（2^53-1）を超えた値も検証を素通りする
   expect((await SELF.fetch(url(`/api/transactions?amount_min=${MAX_AMOUNT}`))).status).toBe(200);
   expect((await SELF.fetch(url(`/api/transactions?amount_min=${MAX_AMOUNT + 1}`))).status).toBe(
     400,
@@ -75,6 +75,14 @@ it("金額は 9 桁まで受け付け、超えたら 400 で弾く", async () =>
 it("負の offset は 400 で弾く", async () => {
   const res = await SELF.fetch(url("/api/transactions?offset=-1"));
   expect(res.status).toBe(400);
+});
+
+it("安全な整数を超える指定は 400 で弾く", async () => {
+  // valibot の `v.integer()` は `Number.isInteger` そのままで、丸められて
+  // 整数になる値も指数表記も通す。`v.safeInteger()` に替えてあることを固定する
+  // （上限を持たない offset は、これが唯一の門になる）
+  expect((await SELF.fetch(url("/api/transactions?offset=1e30"))).status).toBe(400);
+  expect((await SELF.fetch(url("/api/transactions?offset=9007199254740993"))).status).toBe(400);
 });
 
 it("マスタは Zaim の並び（支出 → 収入、sort 順）で返る", async () => {

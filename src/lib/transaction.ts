@@ -8,6 +8,7 @@
  */
 
 import type { Transaction } from "../api/transactions";
+import type { Mode } from "./filter";
 
 /** 明細 1 件の表示テキスト。 */
 export interface RowText {
@@ -187,12 +188,20 @@ export interface DetailField {
   value: string;
 }
 
-/** 種別の表示名。Zaim が返す `mode` をそのまま出すと英語だけが並ぶ。 */
-const MODE_LABELS: Record<string, string> = {
-  payment: "支出",
-  income: "収入",
-  transfer: "振替",
-};
+/**
+ * 種別の表示名。Zaim が返す `mode` をそのまま出すと英語だけが並ぶ。
+ *
+ * `satisfies` で `Mode` を網羅させたうえで Map に移している。表そのものに
+ * `Record<string, string>` を付けると種別を増やしたときの取りこぼしが型で
+ * 出なくなり、リテラルのまま持つと `string` の `mode` で引けない。
+ */
+const MODE_LABELS = new Map(
+  Object.entries({
+    payment: "支出",
+    income: "収入",
+    transfer: "振替",
+  } satisfies Record<Mode, string>),
+);
 
 /**
  * 種別の表示名を返す。
@@ -204,7 +213,7 @@ const MODE_LABELS: Record<string, string> = {
  * @returns 表示名。
  */
 export function modeLabel(mode: string): string {
-  return MODE_LABELS[mode] ?? mode;
+  return MODE_LABELS.get(mode) ?? mode;
 }
 
 /**
