@@ -392,3 +392,7 @@ Cloudflare の認証情報（`Account > D1 > Edit` のトークン）が必要
 - コミットは Conventional Commits、本文は日本語
 - 旧 Python 実装は完全に削除済み。`src/zaimviewer/`、`tests/`、`.venv`、
   `data/zaim.db`、`__pycache__` のいずれも手元に残っていない
+
+## Code Review Rules
+
+- レビューコメントは日本語で記載する
