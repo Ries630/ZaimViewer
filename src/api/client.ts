@@ -21,7 +21,7 @@ export const client = hc<AppType>("/", { fetch: accessAwareFetch });
 /**
  * レスポンスの union から、成功したときの本体だけを取り出す型。
  *
- * `zValidator` の付いたルートでは、RPC のレスポンス型が「成功」と
+ * `vValidator` の付いたルートでは、RPC のレスポンス型が「成功」と
  * 「バリデーションエラー（400）」の union になる。`res.ok` で分岐しても
  * 値としては絞れるだけで、`json()` の戻り値は union のままなので、
  * 型の側でも成功側を選び出す必要がある。
@@ -40,7 +40,7 @@ type SuccessBody<R> = R extends { status: infer S; json: () => Promise<infer T> 
 /**
  * レスポンスから本体を取り出す。
  *
- * `zValidator` が 400 を返しうることが契約に含まれているため、
+ * `vValidator` が 400 を返しうることが契約に含まれているため、
  * 呼び出し側は `res.ok` で絞ってからでないと本体に触れない。
  * 毎回それを書くと本題が埋もれるので、ここで 1 回だけ吸収する。
  *

@@ -209,7 +209,9 @@ RPC の型が `typeof app` に積み上がらず、PWA の `hc<AppType>` から�
 （入力欄でそれより前に止める）の両方がそこから import する。依存を持たない別モジュールに
 してあるのが肝で、`index.ts` に置いたまま値として import するとクライアントのバンドルに
 Worker 本体が入る。金額に上限を置いているのは、`<input type="number">` が桁数を
-制限せず、上限が無いと安全な整数（2^53-1）を超えた値まで通ってしまうため。
+制限しないため。上限が無くても `v.safeInteger()` が安全な整数（2^53-1）超えは 400 で
+弾くが、それだけだと 400 の理由が伝わらない。上限を明示することで、400 の理由が
+「桁が大きすぎる」と分かるようにしてある（`worker/test/api.test.ts`）。
 
 **入力欄では `input-sm` を使わない。** daisyUI は iOS Safari 限定
 （`@media (pointer:coarse)` かつ `@supports (-webkit-touch-callout:none)`）で
