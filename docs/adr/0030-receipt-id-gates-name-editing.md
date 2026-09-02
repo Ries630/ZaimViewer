@@ -1,6 +1,6 @@
 # ADR-0030: 品名を編集できるのは `receipt_id` を持つ明細だけとし、持たない既存分には後付けする
 
-- ステータス: 承認済み
+- ステータス: 廃止（ADR-0035 により置換）
 - 日付: 2026-08-19
 - 関連: [#37](https://github.com/Ries630/ZaimViewer/issues/37)、[#6](https://github.com/Ries630/ZaimViewer/issues/6)、[ADR-0002](0002-no-local-only-data.md)、[ADR-0003](0003-edit-through-zaim-api.md)、[ADR-0029](0029-detail-bottom-sheet-as-edit-entry.md)
 
@@ -146,3 +146,9 @@ transfer の PUT 自体を検証しておらず、Zaim の振替画面に品名�
   移行そのものが不要になり、決定 1 の出し分けも要らなくなる
 - **Zaim の採番が 40 億に近づいたとき。** 実測 8.6 万/日では約 70 年先だが、
   採番方式が変われば早まる
+
+## 置換理由
+
+支出の編集画面で確認した `receipt_id` の効果を、未検証の収入にも一般化していた。
+支出だけに限定し、収入へ後付けした値を戻す判断は
+[ADR-0035](0035-itemized-receipt-id-is-payment-only.md) に記録する。

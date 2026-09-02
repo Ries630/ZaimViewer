@@ -188,7 +188,7 @@ Safari と Cookie ストアが別で、初回だけ Google のログイン画面
 | フィルタの選択肢は Zaim の並び（有効なものが先 → 支出・収入 → `sort`）で返す。削除済みは明細から参照されているものだけ残す | [0027](docs/adr/0027-master-options-follow-zaim-order.md) |
 | Service Worker は静的アセットの precache だけに使い、ナビゲーションと `/api/*` には触らせない | [0028](docs/adr/0028-service-worker-precache-only.md) |
 | 明細の詳細をボトムシートで見せ、そこを工程 ③ の編集の入口にする。一覧の行タップはこれで埋まる | [0029](docs/adr/0029-detail-bottom-sheet-as-edit-entry.md) |
-| 品名を編集できるのは `receipt_id` を持つ明細だけ。持たない既存分には後付けして解消する | [0030](docs/adr/0030-receipt-id-gates-name-editing.md) |
+| `receipt_id` による品目化は支出だけに限定する。収入と振替には独自採番しない | [0035](docs/adr/0035-itemized-receipt-id-is-payment-only.md) |
 | 指示ファイルを `AGENTS.md` に移し、`CLAUDE.md` はインポートだけにする | [0031](docs/adr/0031-agents-md-as-instruction-source.md) |
 | anti-slop の Oxlint プラグインをベンダリングし、ルールを段階的に有効にする | [0032](docs/adr/0032-anti-slop-lint-rules.md) |
 | 入力検証は valibot に一本化する。Worker もクライアントも同じ | [0034](docs/adr/0034-valibot-for-validation.md) |
@@ -373,11 +373,12 @@ Cloudflare の認証情報（`Account > D1 > Edit` のトークン）が必要
    一番軽い編集がこの地雷を踏む形なので、任意にして呼び出し側の裁量に任せない。
    なお `income` の作成 API は `name` を受け付けないが、更新 API は受け付ける。
 
-   **品名（`name`）を編集できるのは `receipt_id` を持つ明細だけ。** 持たない明細は
+   **支出の品名（`name`）を編集できるのは `receipt_id` を持つ明細だけ。** 持たない支出は
    Zaim の UI が品名を表示も編集もしないため、そこへ書き込むと Zaim 側から
    見えない値になり、消すと復元できない。編集フォームでも PUT でも `name` を扱わない。
-   既存の 1,140 件は `receipt_id` を後付けして解消する
-   （[ADR-0030](docs/adr/0030-receipt-id-gates-name-editing.md)、
+   既存の支出 1,080 件には `receipt_id` を後付けする。収入と振替には独自採番しない。
+   今後の移行でも、移行元の商品名・品目名を支出の `name` に保存するときだけ採番する
+   （[ADR-0035](docs/adr/0035-itemized-receipt-id-is-payment-only.md)、
    [#37](https://github.com/Ries630/ZaimViewer/issues/37)）。
 
    検証していないのは transfer と、画面に出していない列（`place_uid`、`active`、

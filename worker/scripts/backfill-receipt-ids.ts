@@ -1,5 +1,5 @@
 /**
- * Issue #37 の receipt_id 後付けを手元から安全に実行する。
+ * Issue #37 の支出 receipt_id 後付けと収入の補正を手元から安全に実行する。
  *
  * dry-run・canary・本実行・rollback の順序と確認事項の正は `ops/README.md` を参照。
  */
@@ -14,6 +14,7 @@ import {
 import {
   applyReceiptIdBackfill,
   fetchAllMoney,
+  rollbackIncomeReceiptIdBackfill,
   rollbackReceiptIdBackfill,
   runReceiptIdBackfillCanary,
   type ReceiptIdBackfillUpdateEvent,
@@ -27,7 +28,7 @@ const DEFAULT_MANIFEST_PATH = ".receipt-id-backfill-manifest.json";
 const DEFAULT_PROGRESS_PATH = ".receipt-id-backfill-progress.jsonl";
 
 /** CLI が受け付ける操作。 */
-type Command = "dry-run" | "canary" | "apply" | "rollback";
+type Command = "dry-run" | "canary" | "apply" | "rollback-income" | "rollback";
 
 /** 解釈済みの CLI 引数。 */
 interface CliOptions {
@@ -62,6 +63,7 @@ function usage(): string {
   bun run receipt-id:backfill                         # dry-run
   bun run receipt-id:backfill -- --canary
   bun run receipt-id:backfill -- --apply
+  bun run receipt-id:backfill -- --rollback-income
   bun run receipt-id:backfill -- --rollback
 
 オプション:
@@ -84,11 +86,14 @@ function parseArgs(args: readonly string[]): CliOptions {
 
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index] ?? "";
-    if (["--dry-run", "--canary", "--apply", "--rollback"].includes(argument)) {
+    if (
+      ["--dry-run", "--canary", "--apply", "--rollback-income", "--rollback"].includes(argument)
+    ) {
       if (explicitCommand) throw new Error("操作は 1 つだけ指定する");
       if (argument === "--dry-run") command = "dry-run";
       else if (argument === "--canary") command = "canary";
       else if (argument === "--apply") command = "apply";
+      else if (argument === "--rollback-income") command = "rollback-income";
       else command = "rollback";
       explicitCommand = true;
       continue;
@@ -232,6 +237,12 @@ async function main(): Promise<void> {
     console.log(
       `本実行完了: 新規 ${result.newlyApplied} 件、開始時点で適用済み ${result.alreadyApplied} 件`,
     );
+    return;
+  }
+
+  if (options.command === "rollback-income") {
+    const count = await rollbackIncomeReceiptIdBackfill(client, manifest, { onUpdated });
+    console.log(`収入 rollback 完了: ${count} 件を receipt_id 0 に復元`);
     return;
   }
 
