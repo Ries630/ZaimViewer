@@ -1,3 +1,7 @@
+# macOS
+.DS_Store
+._*
+
 # 認証情報
 .env
 .dev.vars
@@ -8,11 +12,26 @@ node_modules/
 # .dev.vars が複製されるので、絶対に追跡しない
 dist/
 
+# ログとテスト成果物
+logs/
+*.log
+coverage/
+*.lcov
+
+# TypeScript / Vite
+*.tsbuildinfo
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+.vite/
+
 # Worker
 .wrangler/
 worker-configuration.d.ts
 # db:init が sync.ts の DDL から生成する。スキーマの正は sync.ts 側
 .schema.sql
+
+# ローカルの Codex 設定
+/.codex/
 
 # Playwright MCP の書き出し（スナップショットとコンソールログ）。
 # スクリーンショットは既定でリポジトリ直下に落ちるので、
