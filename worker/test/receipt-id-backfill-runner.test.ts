@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyReceiptIdBackfill,
+  rollbackIncomeReceiptIdBackfill,
   rollbackReceiptIdBackfill,
   runReceiptIdBackfillCanary,
   type ReceiptIdBackfillClient,
@@ -46,6 +47,7 @@ class MemoryClient implements ReceiptIdBackfillClient {
   failAtUpdate: number | undefined;
   throwAfterUpdate = false;
   mutatePlaceUid = false;
+  mutatePlaceUidOnReset = false;
   amountOnNextLookup: number | undefined;
   dateOnNextLookup: string | undefined;
 
@@ -90,6 +92,7 @@ class MemoryClient implements ReceiptIdBackfillClient {
     if (target.amount !== amount) throw new Error("古い amount が送られた");
     target.receipt_id = receiptId;
     if (this.mutatePlaceUid && receiptId !== 0) target.place_uid = "changed";
+    if (this.mutatePlaceUidOnReset && receiptId === 0) target.place_uid = "changed";
     this.updates.push({ id, amount, receiptId });
     if (this.throwAfterUpdate && receiptId !== 0) throw new Error("応答だけ失敗");
   }
@@ -98,6 +101,26 @@ class MemoryClient implements ReceiptIdBackfillClient {
 const NO_WAIT = async (): Promise<void> => {};
 
 describe("applyReceiptIdBackfill", () => {
+  it("支出だけに計画値を適用し、収入は receipt_id 0 のままにする", async () => {
+    const original = createMoney();
+    const manifest = createReceiptIdBackfillManifest(original, "2026-09-02T00:00:00.000Z");
+    const client = new MemoryClient(original);
+
+    const result = await applyReceiptIdBackfill(client, manifest, { wait: NO_WAIT });
+
+    expect(result).toEqual({ newlyApplied: 1080, alreadyApplied: 0 });
+    expect(
+      client.money
+        .filter(({ mode }) => mode === "payment")
+        .every(({ receipt_id }) => receipt_id !== 0),
+    ).toBe(true);
+    expect(
+      client.money
+        .filter(({ mode }) => mode === "income")
+        .every(({ receipt_id }) => receipt_id === 0),
+    ).toBe(true);
+  });
+
   it("途中失敗後は適用済みを飛ばして残りから再開する", async () => {
     const original = createMoney();
     const manifest = createReceiptIdBackfillManifest(original, "2026-09-02T00:00:00.000Z");
@@ -112,9 +135,9 @@ describe("applyReceiptIdBackfill", () => {
     client.failAtUpdate = undefined;
     const result = await applyReceiptIdBackfill(client, manifest, { wait: NO_WAIT });
 
-    expect(result.newlyApplied).toBe(1138);
+    expect(result.newlyApplied).toBe(1078);
     expect(result.alreadyApplied).toBe(2);
-    expect(client.updates).toHaveLength(1140);
+    expect(client.updates).toHaveLength(1080);
   });
 
   it("更新直前に取り直した amount を送る", async () => {
@@ -142,13 +165,14 @@ describe("applyReceiptIdBackfill", () => {
 });
 
 describe("runReceiptIdBackfillCanary", () => {
-  it("1 件を計画値へ更新して検証後に 0 へ戻す", async () => {
+  it("支出 1 件を計画値へ更新して検証後に 0 へ戻す", async () => {
     const original = createMoney();
     const manifest = createReceiptIdBackfillManifest(original, "2026-09-02T00:00:00.000Z");
     const client = new MemoryClient(original);
 
     const entry = await runReceiptIdBackfillCanary(client, manifest);
 
+    expect(entry.mode).toBe("payment");
     expect(client.updates).toEqual([
       { id: entry.id, amount: required(original[0]).amount, receiptId: entry.receiptId },
       { id: entry.id, amount: required(original[0]).amount, receiptId: 0 },
@@ -201,6 +225,55 @@ describe("runReceiptIdBackfillCanary", () => {
 });
 
 describe("rollbackReceiptIdBackfill", () => {
+  it("収入だけを 0 に戻し、支出の計画値は維持する", async () => {
+    const original = createMoney();
+    const manifest = createReceiptIdBackfillManifest(original, "2026-09-02T00:00:00.000Z");
+    const client = new MemoryClient(original);
+    for (const entry of manifest.entries) {
+      const target = client.money.find(({ id, mode }) => id === entry.id && mode === entry.mode);
+      if (!target) throw new Error("テストデータが不正");
+      target.receipt_id = entry.receiptId;
+    }
+
+    const count = await rollbackIncomeReceiptIdBackfill(client, manifest, { wait: NO_WAIT });
+
+    expect(count).toBe(60);
+    expect(client.updates).toHaveLength(60);
+    expect(client.updates.every(({ receiptId }) => receiptId === 0)).toBe(true);
+    expect(
+      client.money
+        .filter(({ mode }) => mode === "payment")
+        .every(({ receipt_id }) => receipt_id !== 0),
+    ).toBe(true);
+    expect(
+      client.money
+        .filter(({ mode }) => mode === "income")
+        .every(({ receipt_id }) => receipt_id === 0),
+    ).toBe(true);
+
+    await expect(
+      rollbackIncomeReceiptIdBackfill(client, manifest, { wait: NO_WAIT }),
+    ).resolves.toBe(0);
+    expect(client.updates).toHaveLength(60);
+  });
+
+  it("収入の復元時に receipt_id 以外の列も変われば中断する", async () => {
+    const original = createMoney();
+    const manifest = createReceiptIdBackfillManifest(original, "2026-09-02T00:00:00.000Z");
+    const income = manifest.entries.find(({ mode }) => mode === "income");
+    if (!income) throw new Error("テストデータが不正");
+    const client = new MemoryClient(original);
+    const target = client.money.find(({ id, mode }) => id === income.id && mode === income.mode);
+    if (!target) throw new Error("テストデータが不正");
+    target.receipt_id = income.receiptId;
+    client.mutatePlaceUidOnReset = true;
+
+    await expect(
+      rollbackIncomeReceiptIdBackfill(client, manifest, { wait: NO_WAIT }),
+    ).rejects.toThrow("receipt_id 以外の列 place_uid も変化した");
+    expect(client.updates).toHaveLength(1);
+  });
+
   it("計画値が付いた明細だけを 0 に戻す", async () => {
     const original = createMoney();
     const manifest = createReceiptIdBackfillManifest(original, "2026-09-02T00:00:00.000Z");

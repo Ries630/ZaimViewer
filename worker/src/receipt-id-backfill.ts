@@ -10,10 +10,10 @@ export const BACKFILL_RECEIPT_ID_BASE = 4_200_000_000;
 /** 移行対象として確定した支出件数。 */
 const EXPECTED_PAYMENT_COUNT = 1080;
 
-/** 移行対象として確定した収入件数。 */
+/** 当初の固定計画に含めた収入件数。復元用の対応表として保持する。 */
 const EXPECTED_INCOME_COUNT = 60;
 
-/** 移行対象の合計件数。 */
+/** 当初の固定計画の合計件数。 */
 const EXPECTED_TOTAL_COUNT = EXPECTED_PAYMENT_COUNT + EXPECTED_INCOME_COUNT;
 
 /** dry-run で確認する移行対象 1 件。 */
@@ -32,7 +32,7 @@ export interface ReceiptIdBackfillEntry {
   observedAmount: number;
 }
 
-/** dry-run で生成し、canary・本実行・rollback で共有する固定計画。 */
+/** 当初の dry-run で生成し、支出適用と収入補正・緊急復元で共有する固定計画。 */
 export interface ReceiptIdBackfillManifest {
   /** manifest 形式のバージョン。 */
   version: 1;
@@ -89,7 +89,7 @@ function isUpdateMode(mode: string): mode is ReceiptIdUpdateMode {
 }
 
 /**
- * Issue #37 の後付け対象かを型付きで判定する。
+ * Issue #37 の version 1 固定計画へ含める対象かを型付きで判定する。
  *
  * @param item Zaim 明細。
  * @returns receipt_id が 0 で品名を持つ支出・収入なら true。
@@ -203,7 +203,8 @@ export function parseReceiptIdBackfillManifest(
 /**
  * Zaim API の全明細から固定採番の manifest を作る。
  *
- * 対象は receipt_id が 0 で品名を持つ支出・収入だけ。振替は ADR-0030 に従い除外する。
+ * version 1 の歴史的な対象は、receipt_id が 0 で品名を持つ支出・収入である。
+ * 現在の適用対象は ADR-0035 に従って支出だけに限定し、収入は復元用の対応表として残す。
  *
  * @param money Zaim API から取得した全明細。
  * @param createdAt dry-run の ISO 8601 時刻。
@@ -254,12 +255,14 @@ export function createReceiptIdBackfillManifest(
  *
  * @param manifest dry-run で確認済みの固定計画。
  * @param money Zaim API から取り直した全明細。
+ * @param mode 照合対象を限定する明細種別。省略時は固定計画の全件。
  * @returns 再開可能な適用状態。
  * @throws 対象の欠落、確認後の変更、計画外 receipt_id、採番衝突がある場合。
  */
 export function reconcileReceiptIdBackfill(
   manifest: ReceiptIdBackfillManifest,
   money: readonly ZaimMoney[],
+  mode?: ReceiptIdUpdateMode,
 ): ReceiptIdBackfillReconciliation {
   verifyManifest(manifest);
   verifyReceiptIdOwnership(manifest, money);
@@ -269,6 +272,7 @@ export function reconcileReceiptIdBackfill(
   const pending: ReceiptIdBackfillUpdateTarget[] = [];
   const applied: ReceiptIdBackfillEntry[] = [];
   for (const entry of manifest.entries) {
+    if (mode !== undefined && entry.mode !== mode) continue;
     const current = byKey.get(moneyKey(entry.mode, entry.id));
     if (!current) {
       throw new Error(`計画した明細 ${entry.id} (${entry.mode}) が Zaim API に存在しない`);
@@ -299,18 +303,21 @@ export function reconcileReceiptIdBackfill(
  *
  * @param manifest 適用時と同じ固定計画。
  * @param money Zaim API の現在値。
+ * @param mode 抽出対象を限定する明細種別。省略時は固定計画の全件。
  * @returns 計画値が付いている明細と現在日。
  * @throws manifest が不正、または計画値が別の明細に使われている場合。
  */
 export function selectAppliedReceiptIdBackfill(
   manifest: ReceiptIdBackfillManifest,
   money: readonly ZaimMoney[],
+  mode?: ReceiptIdUpdateMode,
 ): ReceiptIdBackfillUpdateTarget[] {
   verifyManifest(manifest);
   verifyReceiptIdOwnership(manifest, money);
   const byKey = new Map(money.map((item) => [moneyKey(item.mode, item.id), item]));
 
   return manifest.entries.flatMap((entry) => {
+    if (mode !== undefined && entry.mode !== mode) return [];
     const current = byKey.get(moneyKey(entry.mode, entry.id));
     return current?.receipt_id === entry.receiptId ? [{ entry, lookupDate: current.date }] : [];
   });

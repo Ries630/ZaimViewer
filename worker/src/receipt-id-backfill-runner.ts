@@ -98,7 +98,7 @@ function findMoney(money: readonly ZaimMoney[], entry: ReceiptIdBackfillEntry): 
 }
 
 /**
- * 1 件ずつ更新し、成功直後にログ用コールバックを呼ぶ。
+ * 1 件ずつ更新し、全列を再取得して receipt_id 以外が不変ならログ用コールバックを呼ぶ。
  *
  * @param client Zaim API 境界。
  * @param updates 更新対象と直前取得に使う現在日。
@@ -138,6 +138,11 @@ async function updateSequentially(
       }
     }
     await client.updateReceiptId(entry.mode, entry.id, latest.amount, receiptId);
+    const afterUpdate = await client.moneyById(entry.mode, entry.id, latest.date);
+    if (!afterUpdate) {
+      throw new Error(`更新直後の明細 ${entry.id} (${entry.mode}) を取得できない`);
+    }
+    verifyOnlyReceiptIdChanged(latest, afterUpdate, receiptId);
     await options.onUpdated?.({ action, entry });
     updatedCount += 1;
     await wait(UPDATE_INTERVAL_MS);
@@ -146,7 +151,7 @@ async function updateSequentially(
 }
 
 /**
- * dry-run 済み manifest を Zaim の最新状態へ適用する。
+ * dry-run 済み manifest の支出を Zaim の最新状態へ適用する。
  *
  * 適用済みの項目は API 状態から判定して飛ばすため、途中失敗後も同じ manifest で再開できる。
  *
@@ -161,10 +166,10 @@ export async function applyReceiptIdBackfill(
   options: ReceiptIdBackfillRunOptions = {},
 ): Promise<ReceiptIdBackfillApplyResult> {
   const before = await fetchAllMoney(client);
-  const reconciliation = reconcileReceiptIdBackfill(manifest, before);
+  const reconciliation = reconcileReceiptIdBackfill(manifest, before, "payment");
   const newlyApplied = await updateSequentially(client, reconciliation.pending, "apply", options);
 
-  const after = reconcileReceiptIdBackfill(manifest, await fetchAllMoney(client));
+  const after = reconcileReceiptIdBackfill(manifest, await fetchAllMoney(client), "payment");
   if (after.pending.length > 0) {
     throw new Error(`適用後も receipt_id が 0 の明細が ${after.pending.length} 件残っている`);
   }
@@ -175,7 +180,7 @@ export async function applyReceiptIdBackfill(
 }
 
 /**
- * manifest の先頭の未適用 1 件を計画値へ更新し、検証後に 0 へ戻す。
+ * manifest の先頭の未適用支出 1 件を計画値へ更新し、検証後に 0 へ戻す。
  *
  * receipt_id 以外の列が変化した場合も rollback を試みた後で失敗を返す。
  *
@@ -189,7 +194,7 @@ export async function runReceiptIdBackfillCanary(
   manifest: ReceiptIdBackfillManifest,
 ): Promise<ReceiptIdBackfillEntry> {
   const current = await fetchAllMoney(client);
-  const reconciliation = reconcileReceiptIdBackfill(manifest, current);
+  const reconciliation = reconcileReceiptIdBackfill(manifest, current, "payment");
   if (reconciliation.applied.length > 0) {
     throw new Error(
       `canary 前に計画値が ${reconciliation.applied.length} 件適用済み（先に rollback する）`,
@@ -247,7 +252,34 @@ export async function runReceiptIdBackfillCanary(
 }
 
 /**
- * manifest の計画値が付いた明細だけを receipt_id 0 へ戻す。
+ * manifest の計画値が付いた指定種別の明細を receipt_id 0 へ戻す。
+ *
+ * @param client Zaim API 境界。
+ * @param manifest 適用時と同じ固定計画。
+ * @param options 待機と記録の差し替え。
+ * @param mode 復元対象の明細種別。省略時は固定計画の全件。
+ * @returns この実行で 0 へ戻した件数。
+ */
+async function rollbackReceiptIdBackfillByMode(
+  client: ReceiptIdBackfillClient,
+  manifest: ReceiptIdBackfillManifest,
+  options: ReceiptIdBackfillRunOptions,
+  mode?: ReceiptIdUpdateMode,
+): Promise<number> {
+  const current = await fetchAllMoney(client);
+  const updates = selectAppliedReceiptIdBackfill(manifest, current, mode);
+  const updatedCount = await updateSequentially(client, updates, "rollback", options);
+
+  const remaining = selectAppliedReceiptIdBackfill(manifest, await fetchAllMoney(client), mode);
+  if (remaining.length > 0) {
+    const scope = mode === undefined ? "" : `${mode} `;
+    throw new Error(`${scope}rollback 後も計画値の receipt_id が ${remaining.length} 件残っている`);
+  }
+  return updatedCount;
+}
+
+/**
+ * manifest の計画値が付いた全明細を receipt_id 0 へ戻す。
  *
  * @param client Zaim API 境界。
  * @param manifest 適用時と同じ固定計画。
@@ -259,13 +291,23 @@ export async function rollbackReceiptIdBackfill(
   manifest: ReceiptIdBackfillManifest,
   options: ReceiptIdBackfillRunOptions = {},
 ): Promise<number> {
-  const current = await fetchAllMoney(client);
-  const updates = selectAppliedReceiptIdBackfill(manifest, current);
-  const updatedCount = await updateSequentially(client, updates, "rollback", options);
+  return rollbackReceiptIdBackfillByMode(client, manifest, options);
+}
 
-  const remaining = selectAppliedReceiptIdBackfill(manifest, await fetchAllMoney(client));
-  if (remaining.length > 0) {
-    throw new Error(`rollback 後も計画値の receipt_id が ${remaining.length} 件残っている`);
-  }
-  return updatedCount;
+/**
+ * 誤って後付けした収入の receipt_id だけを 0 へ戻す。
+ *
+ * 支出の計画値は復元候補・更新対象に含めない。
+ *
+ * @param client Zaim API 境界。
+ * @param manifest 適用時と同じ固定計画。
+ * @param options 待機と記録の差し替え。
+ * @returns この実行で 0 へ戻した収入件数。
+ */
+export async function rollbackIncomeReceiptIdBackfill(
+  client: ReceiptIdBackfillClient,
+  manifest: ReceiptIdBackfillManifest,
+  options: ReceiptIdBackfillRunOptions = {},
+): Promise<number> {
+  return rollbackReceiptIdBackfillByMode(client, manifest, options, "income");
 }
