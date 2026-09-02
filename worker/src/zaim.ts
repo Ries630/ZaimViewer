@@ -40,6 +40,9 @@ export interface ZaimMaster {
   [key: string]: unknown;
 }
 
+/** `receipt_id` を後付けする対象の明細種別。振替は検証未了のため含めない。 */
+export type ReceiptIdUpdateMode = "payment" | "income";
+
 /**
  * 指定ミリ秒だけ待つ。
  *
@@ -52,12 +55,15 @@ function sleep(ms: number): Promise<void> {
 /** Zaim API v2 を呼び出すクライアント。 */
 export class ZaimClient {
   readonly #credentials: OAuth1Credentials;
+  readonly #fetch: typeof fetch;
 
   /**
    * @param credentials Zaim API の OAuth1.0a 認証情報。
+   * @param request HTTP リクエスト関数。テストでは外部通信を差し替える。
    */
-  constructor(credentials: OAuth1Credentials) {
+  constructor(credentials: OAuth1Credentials, request: typeof fetch = fetch) {
     this.#credentials = credentials;
+    this.#fetch = request;
   }
 
   /**
@@ -75,7 +81,7 @@ export class ZaimClient {
     }
 
     const { authorization } = await signRequest("GET", url.toString(), this.#credentials);
-    const res = await fetch(url, { headers: { Authorization: authorization } });
+    const res = await this.#fetch(url, { headers: { Authorization: authorization } });
 
     if (res.status !== 200) {
       const body = await res.text();
@@ -84,6 +90,31 @@ export class ZaimClient {
     // SAFETY: 呼び出し側が Zaim のドキュメントに沿って T を指定する。
     // ステータスは直前に 200 だけに絞ってある
     return (await res.json()) as T;
+  }
+
+  /**
+   * 署名付きフォーム POST を送る。
+   *
+   * @param path BASE_URL からの相対パス（先頭 / 付き）。
+   * @param params フォームボディ。
+   * @throws HTTP ステータスが 200 以外の場合。
+   */
+  async #post(path: string, params: Record<string, string>): Promise<void> {
+    const url = BASE_URL + path;
+    const { authorization } = await signRequest("POST", url, this.#credentials, params);
+    const res = await this.#fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: authorization,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams(params),
+    });
+
+    if (res.status !== 200) {
+      const body = await res.text();
+      throw new Error(`Zaim API error ${res.status}: ${body.slice(0, 500)}`);
+    }
   }
 
   /**
@@ -124,6 +155,64 @@ export class ZaimClient {
   async accounts(): Promise<ZaimMaster[]> {
     const data = await this.#get<{ accounts: ZaimMaster[] }>("/home/account", { mapping: "1" });
     return data.accounts;
+  }
+
+  /**
+   * mode と現在日で範囲を絞り、指定 ID の明細を取得する。
+   *
+   * Zaim の一覧 API に ID フィルタが無いため、日付と mode で絞ったページを走査する。
+   * 更新直前の amount と receipt_id を確認する用途で使う。
+   *
+   * @param mode 支出または収入。
+   * @param id 明細 ID。
+   * @param date 現在の明細日。
+   * @returns 最新の明細。指定日に見つからなければ undefined。
+   */
+  async moneyById(
+    mode: ReceiptIdUpdateMode,
+    id: number,
+    date: string,
+  ): Promise<ZaimMoney | undefined> {
+    let page = 1;
+    for (;;) {
+      const data = await this.#get<{ money: ZaimMoney[] }>("/home/money", {
+        mapping: "1",
+        mode,
+        start_date: date,
+        end_date: date,
+        limit: String(PAGE_LIMIT),
+        page: String(page),
+      });
+      const found = data.money.find((item) => item.id === id && item.mode === mode);
+      if (found) return found;
+      if (data.money.length < PAGE_LIMIT) return undefined;
+      page += 1;
+      await sleep(REQUEST_INTERVAL_MS);
+    }
+  }
+
+  /**
+   * 既存明細の `receipt_id` だけを更新する。
+   *
+   * Zaim は更新時に `amount` を省略すると 0 にするため、必須引数として同送する。
+   * 振替は更新挙動と画面表示が未検証なので、この境界では受け付けない。
+   *
+   * @param mode 支出または収入。
+   * @param id 更新する明細 ID。
+   * @param amount Zaim API から直前に取得した金額。
+   * @param receiptId 設定するレシート ID。0 は元に戻す操作。
+   */
+  async updateReceiptId(
+    mode: ReceiptIdUpdateMode,
+    id: number,
+    amount: number,
+    receiptId: number,
+  ): Promise<void> {
+    await this.#post(`/home/money/${mode}/update/${id}`, {
+      amount: String(amount),
+      receipt_id: String(receiptId),
+      mapping: "1",
+    });
   }
 
   /**

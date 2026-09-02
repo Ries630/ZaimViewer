@@ -30,6 +30,10 @@ worker-configuration.d.ts
 # db:init が sync.ts の DDL から生成する。スキーマの正は sync.ts 側
 .schema.sql
 
+# Issue #37 の receipt_id 後付けで使う確認済み計画と処理済みログ
+/.receipt-id-backfill-manifest.json
+/.receipt-id-backfill-progress.jsonl
+
 # ローカルの Codex 設定
 /.codex/
 

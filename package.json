@@ -14,6 +14,7 @@
     "format:check": "oxfmt --check .",
     "typecheck": "tsc --noEmit && tsc --noEmit -p worker/tsconfig.json && tsc --noEmit -p worker/tsconfig.scripts.json",
     "sync": "bun --env-file=.dev.vars run worker/scripts/sync.ts",
+    "receipt-id:backfill": "bun --env-file=.dev.vars run worker/scripts/backfill-receipt-ids.ts",
     "check": "bun run format:check && bun run lint && bun run typecheck && bun run test && bun run build",
     "cf-typegen": "wrangler types",
     "db:init": "bun run worker/scripts/init-schema.ts > .schema.sql && wrangler d1 execute DB --remote --file .schema.sql -y"
