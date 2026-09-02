@@ -44,18 +44,18 @@ export interface ReceiptIdBackfillManifest {
   entries: ReceiptIdBackfillEntry[];
 }
 
-/** 本実行時に Zaim API から得た最新金額を伴う未適用項目。 */
-export interface PendingReceiptIdUpdate {
+/** 更新直前の再取得へ渡す対象。 */
+export interface ReceiptIdBackfillUpdateTarget {
   /** 固定計画上の項目。 */
   entry: ReceiptIdBackfillEntry;
-  /** 更新直前に Zaim API から取得した金額。 */
-  amount: number;
+  /** 現在の明細を 1 件に絞る日付。 */
+  lookupDate: string;
 }
 
 /** 現在の Zaim 明細と固定計画を照合した結果。 */
 export interface ReceiptIdBackfillReconciliation {
   /** まだ receipt_id が 0 の項目。 */
-  pending: PendingReceiptIdUpdate[];
+  pending: ReceiptIdBackfillUpdateTarget[];
   /** 既に計画値が設定され、再実行時に飛ばせる項目。 */
   applied: ReceiptIdBackfillEntry[];
 }
@@ -161,6 +161,31 @@ function verifyManifest(manifest: ReceiptIdBackfillManifest): void {
 }
 
 /**
+ * 採番予定値が計画外の明細に使われていないことを確認する。
+ *
+ * @param manifest 固定計画。
+ * @param money Zaim API の現在値。
+ * @throws 計画値を別の明細が使っている場合。
+ */
+function verifyReceiptIdOwnership(
+  manifest: ReceiptIdBackfillManifest,
+  money: readonly ZaimMoney[],
+): void {
+  const plannedByReceiptId = new Map(
+    manifest.entries.map((entry) => [entry.receiptId, moneyKey(entry.mode, entry.id)]),
+  );
+  for (const item of money) {
+    if (item.receipt_id === undefined) continue;
+    const plannedKey = plannedByReceiptId.get(item.receipt_id);
+    if (plannedKey && plannedKey !== moneyKey(item.mode, item.id)) {
+      throw new Error(
+        `採番予定の receipt_id ${item.receipt_id} は計画外の明細 ${item.id} で使用済み`,
+      );
+    }
+  }
+}
+
+/**
  * JSON から得た値を receipt_id 後付け manifest として検証する。
  *
  * @param input JSON.parse 後のオブジェクト。
@@ -237,22 +262,11 @@ export function reconcileReceiptIdBackfill(
   money: readonly ZaimMoney[],
 ): ReceiptIdBackfillReconciliation {
   verifyManifest(manifest);
+  verifyReceiptIdOwnership(manifest, money);
 
   const byKey = new Map(money.map((item) => [moneyKey(item.mode, item.id), item]));
-  const plannedByReceiptId = new Map(
-    manifest.entries.map((entry) => [entry.receiptId, moneyKey(entry.mode, entry.id)]),
-  );
-  for (const item of money) {
-    if (item.receipt_id === undefined) continue;
-    const plannedKey = plannedByReceiptId.get(item.receipt_id);
-    if (plannedKey && plannedKey !== moneyKey(item.mode, item.id)) {
-      throw new Error(
-        `採番予定の receipt_id ${item.receipt_id} は計画外の明細 ${item.id} で使用済み`,
-      );
-    }
-  }
 
-  const pending: PendingReceiptIdUpdate[] = [];
+  const pending: ReceiptIdBackfillUpdateTarget[] = [];
   const applied: ReceiptIdBackfillEntry[] = [];
   for (const entry of manifest.entries) {
     const current = byKey.get(moneyKey(entry.mode, entry.id));
@@ -271,10 +285,35 @@ export function reconcileReceiptIdBackfill(
     if (current.date !== entry.observedDate || current.name !== entry.observedName) {
       throw new Error(`明細 ${entry.id} は dry-run 後に変更されているため中断`);
     }
-    pending.push({ entry, amount: current.amount });
+    pending.push({ entry, lookupDate: current.date });
   }
 
   return { pending, applied };
+}
+
+/**
+ * 現在計画値が付いている明細だけを rollback 候補として抽出する。
+ *
+ * 未適用項目の欠落や変更は緊急復元を妨げない。計画値が別の明細に付く衝突だけは、
+ * 所有者を誤って更新しないため中断する。
+ *
+ * @param manifest 適用時と同じ固定計画。
+ * @param money Zaim API の現在値。
+ * @returns 計画値が付いている明細と現在日。
+ * @throws manifest が不正、または計画値が別の明細に使われている場合。
+ */
+export function selectAppliedReceiptIdBackfill(
+  manifest: ReceiptIdBackfillManifest,
+  money: readonly ZaimMoney[],
+): ReceiptIdBackfillUpdateTarget[] {
+  verifyManifest(manifest);
+  verifyReceiptIdOwnership(manifest, money);
+  const byKey = new Map(money.map((item) => [moneyKey(item.mode, item.id), item]));
+
+  return manifest.entries.flatMap((entry) => {
+    const current = byKey.get(moneyKey(entry.mode, entry.id));
+    return current?.receipt_id === entry.receiptId ? [{ entry, lookupDate: current.date }] : [];
+  });
 }
 
 /**

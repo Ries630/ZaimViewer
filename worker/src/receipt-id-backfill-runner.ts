@@ -2,9 +2,11 @@
 
 import {
   reconcileReceiptIdBackfill,
+  selectAppliedReceiptIdBackfill,
   verifyOnlyReceiptIdChanged,
   type ReceiptIdBackfillEntry,
   type ReceiptIdBackfillManifest,
+  type ReceiptIdBackfillUpdateTarget,
 } from "./receipt-id-backfill";
 import type { ReceiptIdUpdateMode, ZaimMoney } from "./zaim";
 
@@ -12,6 +14,13 @@ import type { ReceiptIdUpdateMode, ZaimMoney } from "./zaim";
 export interface ReceiptIdBackfillClient {
   /** @returns 全明細をページ単位で返す非同期反復子。 */
   iterMoney(): AsyncGenerator<ZaimMoney[]>;
+  /**
+   * @param mode 支出または収入。
+   * @param id 明細 ID。
+   * @param date 現在の明細日。
+   * @returns 指定明細の最新値。見つからなければ undefined。
+   */
+  moneyById(mode: ReceiptIdUpdateMode, id: number, date: string): Promise<ZaimMoney | undefined>;
   /**
    * @param mode 支出または収入。
    * @param id 明細 ID。
@@ -92,23 +101,48 @@ function findMoney(money: readonly ZaimMoney[], entry: ReceiptIdBackfillEntry): 
  * 1 件ずつ更新し、成功直後にログ用コールバックを呼ぶ。
  *
  * @param client Zaim API 境界。
- * @param updates 更新対象と最新金額。
+ * @param updates 更新対象と直前取得に使う現在日。
  * @param action 適用または rollback。
  * @param options 待機と記録の差し替え。
  */
 async function updateSequentially(
   client: ReceiptIdBackfillClient,
-  updates: readonly { entry: ReceiptIdBackfillEntry; amount: number }[],
+  updates: readonly ReceiptIdBackfillUpdateTarget[],
   action: ReceiptIdBackfillUpdateEvent["action"],
   options: ReceiptIdBackfillRunOptions,
-): Promise<void> {
+): Promise<number> {
   const wait = options.wait ?? sleep;
-  for (const [index, { entry, amount }] of updates.entries()) {
+  let updatedCount = 0;
+  for (const { entry, lookupDate } of updates) {
+    const latest = await client.moneyById(entry.mode, entry.id, lookupDate);
+    if (!latest) {
+      throw new Error(`更新直前の明細 ${entry.id} (${entry.mode}) を取得できない`);
+    }
     const receiptId = action === "apply" ? entry.receiptId : 0;
-    await client.updateReceiptId(entry.mode, entry.id, amount, receiptId);
+    if (action === "apply") {
+      if (latest.receipt_id === entry.receiptId) continue;
+      if (latest.receipt_id !== 0) {
+        throw new Error(
+          `明細 ${entry.id} の receipt_id は 0 でも計画値でもない: ${String(latest.receipt_id)}`,
+        );
+      }
+      if (latest.date !== entry.observedDate || latest.name !== entry.observedName) {
+        throw new Error(`明細 ${entry.id} は更新直前に変更されているため中断`);
+      }
+    } else {
+      if (latest.receipt_id === 0) continue;
+      if (latest.receipt_id !== entry.receiptId) {
+        throw new Error(
+          `明細 ${entry.id} の receipt_id は 0 でも計画値でもない: ${String(latest.receipt_id)}`,
+        );
+      }
+    }
+    await client.updateReceiptId(entry.mode, entry.id, latest.amount, receiptId);
     await options.onUpdated?.({ action, entry });
-    if (index < updates.length - 1) await wait(UPDATE_INTERVAL_MS);
+    updatedCount += 1;
+    await wait(UPDATE_INTERVAL_MS);
   }
+  return updatedCount;
 }
 
 /**
@@ -128,14 +162,14 @@ export async function applyReceiptIdBackfill(
 ): Promise<ReceiptIdBackfillApplyResult> {
   const before = await fetchAllMoney(client);
   const reconciliation = reconcileReceiptIdBackfill(manifest, before);
-  await updateSequentially(client, reconciliation.pending, "apply", options);
+  const newlyApplied = await updateSequentially(client, reconciliation.pending, "apply", options);
 
   const after = reconcileReceiptIdBackfill(manifest, await fetchAllMoney(client));
   if (after.pending.length > 0) {
     throw new Error(`適用後も receipt_id が 0 の明細が ${after.pending.length} 件残っている`);
   }
   return {
-    newlyApplied: reconciliation.pending.length,
+    newlyApplied,
     alreadyApplied: reconciliation.applied.length,
   };
 }
@@ -168,7 +202,7 @@ export async function runReceiptIdBackfillCanary(
   const before = findMoney(current, entry);
   let primaryError: unknown;
   try {
-    await client.updateReceiptId(entry.mode, entry.id, candidate.amount, entry.receiptId);
+    await client.updateReceiptId(entry.mode, entry.id, before.amount, entry.receiptId);
   } catch (error) {
     // 応答が途切れてもサーバー側では反映済みの場合があるため、必ず再取得して判定する
     primaryError = error;
@@ -226,16 +260,12 @@ export async function rollbackReceiptIdBackfill(
   options: ReceiptIdBackfillRunOptions = {},
 ): Promise<number> {
   const current = await fetchAllMoney(client);
-  const reconciliation = reconcileReceiptIdBackfill(manifest, current);
-  const updates = reconciliation.applied.map((entry) => ({
-    entry,
-    amount: findMoney(current, entry).amount,
-  }));
-  await updateSequentially(client, updates, "rollback", options);
+  const updates = selectAppliedReceiptIdBackfill(manifest, current);
+  const updatedCount = await updateSequentially(client, updates, "rollback", options);
 
-  const after = reconcileReceiptIdBackfill(manifest, await fetchAllMoney(client));
-  if (after.applied.length > 0) {
-    throw new Error(`rollback 後も計画値の receipt_id が ${after.applied.length} 件残っている`);
+  const remaining = selectAppliedReceiptIdBackfill(manifest, await fetchAllMoney(client));
+  if (remaining.length > 0) {
+    throw new Error(`rollback 後も計画値の receipt_id が ${remaining.length} 件残っている`);
   }
-  return updates.length;
+  return updatedCount;
 }

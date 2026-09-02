@@ -158,6 +158,40 @@ export class ZaimClient {
   }
 
   /**
+   * mode と現在日で範囲を絞り、指定 ID の明細を取得する。
+   *
+   * Zaim の一覧 API に ID フィルタが無いため、日付と mode で絞ったページを走査する。
+   * 更新直前の amount と receipt_id を確認する用途で使う。
+   *
+   * @param mode 支出または収入。
+   * @param id 明細 ID。
+   * @param date 現在の明細日。
+   * @returns 最新の明細。指定日に見つからなければ undefined。
+   */
+  async moneyById(
+    mode: ReceiptIdUpdateMode,
+    id: number,
+    date: string,
+  ): Promise<ZaimMoney | undefined> {
+    let page = 1;
+    for (;;) {
+      const data = await this.#get<{ money: ZaimMoney[] }>("/home/money", {
+        mapping: "1",
+        mode,
+        start_date: date,
+        end_date: date,
+        limit: String(PAGE_LIMIT),
+        page: String(page),
+      });
+      const found = data.money.find((item) => item.id === id && item.mode === mode);
+      if (found) return found;
+      if (data.money.length < PAGE_LIMIT) return undefined;
+      page += 1;
+      await sleep(REQUEST_INTERVAL_MS);
+    }
+  }
+
+  /**
    * 既存明細の `receipt_id` だけを更新する。
    *
    * Zaim は更新時に `amount` を省略すると 0 にするため、必須引数として同送する。

@@ -82,8 +82,9 @@ bun run receipt-id:backfill -- --canary
 bun run receipt-id:backfill -- --apply
 ```
 
-固定計画と Zaim API の現在値を照合してから 1 件ずつ更新する。`amount` は manifest の値を
-使わず、**実行直前に Zaim API から取り直した値**を必ず同送する。成功した ID は
+固定計画と Zaim API の現在値を照合してから 1 件ずつ更新する。各明細を更新する直前にも
+mode と現在日で絞って再取得し、`amount` は manifest や開始時の値ではなく、
+**その1件の直前取得で得た値**を必ず同送する。成功した ID は
 `.receipt-id-backfill-progress.jsonl` へ追記する。途中で失敗した場合は同じコマンドを
 再実行すれば、API 上で計画値が付いている明細を飛ばして残りから再開する。
 

@@ -46,6 +46,8 @@ class MemoryClient implements ReceiptIdBackfillClient {
   failAtUpdate: number | undefined;
   throwAfterUpdate = false;
   mutatePlaceUid = false;
+  amountOnNextLookup: number | undefined;
+  dateOnNextLookup: string | undefined;
 
   /** @param money 初期状態。 */
   constructor(money: ZaimMoney[]) {
@@ -55,6 +57,24 @@ class MemoryClient implements ReceiptIdBackfillClient {
   /** @yields 現在の全明細。 */
   async *iterMoney(): AsyncGenerator<ZaimMoney[]> {
     yield structuredClone(this.money);
+  }
+
+  /** ID と現在日で最新明細を取得する。 */
+  async moneyById(
+    mode: ReceiptIdUpdateMode,
+    id: number,
+    date: string,
+  ): Promise<ZaimMoney | undefined> {
+    const target = this.money.find((item) => item.id === id && item.mode === mode);
+    if (target && this.dateOnNextLookup !== undefined) {
+      target.date = this.dateOnNextLookup;
+      this.dateOnNextLookup = undefined;
+    }
+    if (target && this.amountOnNextLookup !== undefined) {
+      target.amount = this.amountOnNextLookup;
+      this.amountOnNextLookup = undefined;
+    }
+    return target?.date === date ? structuredClone(target) : undefined;
   }
 
   /** メモリ上の receipt_id を更新する。 */
@@ -101,11 +121,23 @@ describe("applyReceiptIdBackfill", () => {
     const original = createMoney();
     const manifest = createReceiptIdBackfillManifest(original, "2026-09-02T00:00:00.000Z");
     const client = new MemoryClient(original);
-    required(client.money[0]).amount = 999_999;
+    client.amountOnNextLookup = 999_999;
 
     await applyReceiptIdBackfill(client, manifest, { wait: NO_WAIT });
 
     expect(required(client.updates[0]).amount).toBe(999_999);
+  });
+
+  it("直前取得で対象が見つからなければ古い amount を送らない", async () => {
+    const original = createMoney();
+    const manifest = createReceiptIdBackfillManifest(original, "2026-09-02T00:00:00.000Z");
+    const client = new MemoryClient(original);
+    client.dateOnNextLookup = "2026-04-02";
+
+    await expect(applyReceiptIdBackfill(client, manifest, { wait: NO_WAIT })).rejects.toThrow(
+      "更新直前の明細 10000 (payment) を取得できない",
+    );
+    expect(client.updates).toHaveLength(0);
   });
 });
 
@@ -181,5 +213,31 @@ describe("rollbackReceiptIdBackfill", () => {
     expect(count).toBe(2);
     expect(client.updates.map(({ receiptId }) => receiptId)).toEqual([0, 0]);
     expect(client.money.every(({ receipt_id: receiptId }) => receiptId === 0)).toBe(true);
+  });
+
+  it("rollback も更新直前に取り直した amount を送る", async () => {
+    const original = createMoney();
+    const manifest = createReceiptIdBackfillManifest(original, "2026-09-02T00:00:00.000Z");
+    const client = new MemoryClient(original);
+    required(client.money[0]).receipt_id = required(manifest.entries[0]).receiptId;
+    client.amountOnNextLookup = 777_777;
+
+    await rollbackReceiptIdBackfill(client, manifest, { wait: NO_WAIT });
+
+    expect(required(client.updates[0]).amount).toBe(777_777);
+  });
+
+  it("未適用項目が削除・変更されても適用済みだけを戻す", async () => {
+    const original = createMoney();
+    const manifest = createReceiptIdBackfillManifest(original, "2026-09-02T00:00:00.000Z");
+    const client = new MemoryClient(original);
+    required(client.money[0]).receipt_id = required(manifest.entries[0]).receiptId;
+    client.money.splice(1, 1);
+    required(client.money[1]).name = "dry-run 後に変更";
+
+    const count = await rollbackReceiptIdBackfill(client, manifest, { wait: NO_WAIT });
+
+    expect(count).toBe(1);
+    expect(required(client.money[0]).receipt_id).toBe(0);
   });
 });

@@ -101,7 +101,7 @@ describe("createReceiptIdBackfillManifest", () => {
 });
 
 describe("reconcileReceiptIdBackfill", () => {
-  it("適用済みを飛ばし、未適用には API から取り直した amount を渡す", () => {
+  it("適用済みを飛ばし、未適用には直前取得で使う現在日を渡す", () => {
     const original = createMoney();
     const manifest = createReceiptIdBackfillManifest(original, "2026-09-02T00:00:00.000Z");
     const current = structuredClone(original);
@@ -111,12 +111,11 @@ describe("reconcileReceiptIdBackfill", () => {
     const pending = current.find(({ id, mode }) => id === second.id && mode === second.mode);
     if (!applied || !pending) throw new Error("テストデータが不正");
     applied.receipt_id = first.receiptId;
-    pending.amount = 98_765;
 
     const result = reconcileReceiptIdBackfill(manifest, current);
 
     expect(result.applied).toEqual([first]);
-    expect(result.pending[0]).toMatchObject({ entry: second, amount: 98_765 });
+    expect(result.pending[0]).toMatchObject({ entry: second, lookupDate: "2026-03-01" });
     expect(result.pending).toHaveLength(1139);
   });
 

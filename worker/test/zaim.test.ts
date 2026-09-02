@@ -65,3 +65,37 @@ describe("ZaimClient.updateReceiptId", () => {
     );
   });
 });
+
+describe("ZaimClient.moneyById", () => {
+  it("mode と現在日で絞り、対象 ID の最新明細を返す", async () => {
+    const request = vi.fn<typeof fetch>(async () =>
+      Response.json({
+        money: [
+          {
+            id: 123,
+            mode: "payment",
+            date: "2026-04-01",
+            amount: 9999,
+            receipt_id: 0,
+          },
+        ],
+      }),
+    );
+    const client = new ZaimClient(CREDENTIALS, request);
+
+    const money = await client.moneyById("payment", 123, "2026-04-01");
+
+    expect(money).toMatchObject({ id: 123, amount: 9999 });
+    const url = new Request(required(vi.mocked(request).mock.calls[0])[0]).url;
+    expect(url).toBe(
+      "https://api.zaim.net/v2/home/money?mapping=1&mode=payment&start_date=2026-04-01&end_date=2026-04-01&limit=100&page=1",
+    );
+  });
+
+  it("指定日のレスポンスに対象 ID がなければ undefined を返す", async () => {
+    const request = vi.fn<typeof fetch>(async () => Response.json({ money: [] }));
+    const client = new ZaimClient(CREDENTIALS, request);
+
+    await expect(client.moneyById("income", 456, "2026-03-01")).resolves.toBeUndefined();
+  });
+});
