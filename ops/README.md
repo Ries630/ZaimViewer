@@ -41,3 +41,68 @@ sh ops/install-sync-agent.sh
 ```bash
 bunx wrangler d1 execute DB --remote --command "SELECT * FROM sync_meta"
 ```
+
+## receipt_id を後付けする（Issue #37、一度限り）
+
+この手順は、`receipt_id = 0` かつ品名ありの支出 1,080 件・収入 60 件だけを対象にする。
+振替 3 件は ADR-0030 に従って対象外。**変更系は PR のマージ後に `main` で実行し、
+各ゲートの結果を確認してから次へ進む。**
+
+### 1. dry-run
+
+```bash
+bun run receipt-id:backfill
+```
+
+Zaim API から全件を取り直し、対象一覧を標準出力へ出す。同時に、ID 順で
+`4200000000` から採番した固定計画を `.receipt-id-backfill-manifest.json` へ保存する。
+このファイルには品名と dry-run 時点の金額が入るため Git には追加しない。
+既存ファイルは誤って rollback の対応表を失わないよう上書きしない。
+
+確認項目:
+
+- 合計 1,140 件（payment 1,080 / income 60）
+- transfer が 0 件
+- `receipt_id` が 4,200,000,000〜4,200,001,139 の連番
+- 対象の ID・日付・金額・品名に不審なものがない
+
+### 2. canary
+
+```bash
+bun run receipt-id:backfill -- --canary
+```
+
+先頭の未適用 1 件だけを計画値へ更新し、Zaim API から全列を取り直して
+`receipt_id` 以外が変わっていないことを確認した後、`receipt_id = 0` へ戻す。
+復元後も全列を再取得して元の状態との一致を確認する。ここで失敗したら本実行しない。
+
+### 3. 本実行
+
+```bash
+bun run receipt-id:backfill -- --apply
+```
+
+固定計画と Zaim API の現在値を照合してから 1 件ずつ更新する。`amount` は manifest の値を
+使わず、**実行直前に Zaim API から取り直した値**を必ず同送する。成功した ID は
+`.receipt-id-backfill-progress.jsonl` へ追記する。途中で失敗した場合は同じコマンドを
+再実行すれば、API 上で計画値が付いている明細を飛ばして残りから再開する。
+
+本実行後は次の順で確認する。
+
+```bash
+bun run sync
+```
+
+1. 本番 D1 で対象 1,140 件すべてに計画値が反映されたことを確認する
+2. ZaimViewer の API で対象件数と `receipt_id` を確認する
+3. iPhone の Zaim で支出・収入から数件ずつ開き、品名欄の表示と編集を目視確認する
+
+### 緊急時の rollback
+
+```bash
+bun run receipt-id:backfill -- --rollback
+```
+
+同じ固定計画を使い、計画値が付いた明細だけを `receipt_id = 0` へ戻す。
+計画外の値は上書きしない。rollback でも金額は Zaim API の最新値を同送し、成功を
+同じ処理済みログへ追記する。完了後は `bun run sync` でミラーを追随させる。
