@@ -8,7 +8,7 @@
  */
 
 import type { Database, PreparedStatement } from "./db";
-import { acquireMutation, releaseMutation } from "./edit-store";
+import { acquireMutation, hasUnresolvedEditPlans, releaseMutation } from "./edit-store";
 import { TRANSACTION_COLUMNS, transactionValues } from "./mirror-write";
 import { ZaimClient, type ZaimMaster, type ZaimMoney } from "./zaim";
 
@@ -177,20 +177,6 @@ function insertTransactionStatements(
   return rows.map((row) => stmt.bind(...transactionValues(row)));
 }
 
-/** 編集計画に未照合の明細が残っているかを JSON1 で検査する。 */
-async function hasUnresolvedEditPlan(db: Database): Promise<boolean> {
-  const row = await db
-    .prepare(
-      `SELECT edit_plans.id
-       FROM edit_plans
-       JOIN json_each(edit_plans.payload, '$.items') AS item
-       WHERE json_extract(item.value, '$.status') IN ('sending', 'unknown', 'mirror_pending')
-       LIMIT 1`,
-    )
-    .first<{ id: string }>();
-  return row !== null;
-}
-
 /**
  * Zaim から全件取得してミラー DB を再構築する。
  *
@@ -303,7 +289,7 @@ export async function syncAll(db: Database, client: ZaimClient): Promise<SyncRes
   }
 
   try {
-    if (await hasUnresolvedEditPlan(db)) {
+    if (await hasUnresolvedEditPlans(db)) {
       throw new Error("未照合の編集計画があるため同期を保留");
     }
     return await runSync(db, client);

@@ -20,15 +20,13 @@ export function editCapabilitiesOf(env: EditEnvironment): EditCapabilities {
     v.array(editModeSchema),
     (env.EDIT_VERIFIED_MODES ?? "").split(",").filter(Boolean),
   );
-  const enabled = env.EDIT_ENABLED === "true" && parsed.success && parsed.output.length > 0;
-  const transfer = enabled && env.EDIT_TRANSFER_VERIFIED === "true";
+  const transfer = env.EDIT_TRANSFER_VERIFIED === "true";
+  const modes = parsed.success ? parsed.output.filter((mode) => mode !== "transfer" || transfer) : [];
+  const enabled = env.EDIT_ENABLED === "true" && modes.length > 0;
   return {
     enabled,
-    modes:
-      enabled && parsed.success
-        ? parsed.output.filter((mode) => mode !== "transfer" || transfer)
-        : [],
+    modes: enabled ? modes : [],
     incomeName: enabled && env.EDIT_INCOME_NAME_VERIFIED === "true",
-    transfer,
+    transfer: enabled && transfer,
   };
 }
