@@ -2,6 +2,7 @@
 import { vValidator } from "@hono/valibot-validator";
 import { drizzle } from "drizzle-orm/d1";
 import { Hono, type Context } from "hono";
+import { HTTPException } from "hono/http-exception";
 import { bodyLimit } from "hono/body-limit";
 import * as v from "valibot";
 import { editCapabilitiesOf } from "./edit-config";
@@ -65,6 +66,24 @@ function editClient(env: Env): ZaimClient {
 }
 
 const app = new Hono<{ Bindings: Env }>();
+/** 編集経路の外部応答や家計データを例外本文から露出させない。 */
+app.onError((error, c) => {
+  if (error instanceof EditError) {
+    return c.json({ error: { code: error.code, message: error.message } }, error.status);
+  }
+  if (error instanceof HTTPException && error.status === 400) {
+    return c.json({ error: { code: "invalid_input", message: "送信内容を確認してください" } }, 400);
+  }
+  return c.json(
+    {
+      error: {
+        code: "internal_error",
+        message: "処理結果を取得できませんでした。再送せず状態を確認してください",
+      },
+    },
+    500,
+  );
+});
 app.use(
   "*",
   bodyLimit({
