@@ -3,6 +3,8 @@
 同期だけが Workers の外で動く。理由は [ADR-0015](../docs/adr/0015-sync-outside-worker.md)、
 D1 への書き込み経路は [ADR-0018](../docs/adr/0018-d1-http-api-for-sync.md) を参照。
 
+編集機能の公開・中断後の照合・共有排他の復旧は [編集の運用手順](editing.md) を参照する。
+
 ## 手動で同期する
 
 ```bash

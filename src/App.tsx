@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
+import { useEditCapabilities } from "./api/edits";
 import { useMasters } from "./api/masters";
 import { useMeta } from "./api/meta";
 import { type Transaction, useTransactions } from "./api/transactions";
@@ -9,10 +11,13 @@ import { SummaryBar } from "./components/SummaryBar";
 import { SyncFreshness } from "./components/SyncFreshness";
 import { TransactionList } from "./components/TransactionList";
 import { TransactionSheet } from "./components/TransactionSheet";
+import { BulkEditSheet } from "./components/edit/BulkEditSheet";
+import { EditPlanStatus } from "./components/edit/EditPlanStatus";
 import { useDebounced } from "./hooks/useDebounced";
 import { useOnline } from "./hooks/useOnline";
 import { useStoredFilter } from "./hooks/useStoredFilter";
 import { DEFAULT_FILTER, type FilterState, activeBadges, toTransactionFilter } from "./lib/filter";
+import { MAX_EDIT_ITEMS } from "./lib/edit";
 import { todayInTokyo } from "./lib/format";
 import { nameLookup, reconcile } from "./lib/masters";
 
@@ -27,10 +32,13 @@ const FILTER_DEBOUNCE_MS = 300;
 export function App() {
   const meta = useMeta();
   const masters = useMasters();
+  const editCapabilities = useEditCapabilities();
+  const queryClient = useQueryClient();
   const [filter, setFilter] = useStoredFilter();
   const online = useOnline();
   const sheet = useRef<HTMLDialogElement>(null);
   const detail = useRef<HTMLDialogElement>(null);
+  const bulk = useRef<HTMLDialogElement>(null);
   const [selected, setSelected] = useState<Transaction | null>(null);
 
   // 相対表記の基準。取得し直したときだけ進めれば足りる
@@ -66,8 +74,32 @@ export function App() {
     [transactions.data],
   );
 
+  // 保存後に一覧が更新されても、開いている詳細は同じ ID の最新行を参照する。
+  // 編集開始時の値は編集フォームが保持するため、ここで差し替えても確認内容は変わらない。
+  useEffect(() => {
+    setSelected((current) => {
+      if (!current) return current;
+      return items.find((item) => item.id === current.id) ?? current;
+    });
+  }, [items]);
+
   // 件数と合計はページごとに同じ値が返るので、先頭のページから読めばよい
   const totals = transactions.data?.pages[0];
+  const bulkMode = filter.modes.length === 1 ? (filter.modes[0] ?? null) : null;
+  const refreshAfterEdit = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["transactions"] });
+    void queryClient.invalidateQueries({ queryKey: ["masters"] });
+  }, [queryClient]);
+  const closeAfterSingleEdit = useCallback(() => {
+    refreshAfterEdit();
+    setSelected(null);
+    detail.current?.close();
+  }, [refreshAfterEdit]);
+  const bulkReady =
+    bulkMode !== null &&
+    filter === debounced &&
+    !transactions.isPlaceholderData &&
+    !transactions.isFetching;
 
   // 選択を先に反映してから開く。同じ描画で処理されるので、
   // 開く瞬間に前の明細が見えることはない
@@ -108,6 +140,30 @@ export function App() {
           totalAmount={totals?.total_amount}
           singleMode={filter.modes.length === 1}
         />
+        <EditPlanStatus onSettled={refreshAfterEdit} />
+        {bulkMode !== null && totals?.total !== undefined && (
+          <div className="flex items-center justify-between gap-3 border-t border-base-200 py-2">
+            <p className="text-sm text-base-content/70">
+              {totals.total > MAX_EDIT_ITEMS
+                ? `一括編集は ${MAX_EDIT_ITEMS} 件まで`
+                : "表示中の同一種別をまとめて編集"}
+            </p>
+            <button
+              type="button"
+              className="btn"
+              disabled={
+                totals.total === 0 ||
+                totals.total > MAX_EDIT_ITEMS ||
+                !bulkReady ||
+                !editCapabilities.data?.enabled ||
+                !editCapabilities.data.modes.includes(bulkMode)
+              }
+              onClick={() => bulk.current?.showModal()}
+            >
+              一括編集
+            </button>
+          </div>
+        )}
       </header>
 
       {/* 条件を差し替えているあいだは前の結果を薄く出しておく。
@@ -130,7 +186,28 @@ export function App() {
         />
       </main>
 
-      <TransactionSheet ref={detail} transaction={selected} today={today} />
+      <TransactionSheet
+        ref={detail}
+        transaction={selected}
+        today={today}
+        masters={mastersData}
+        editCapabilities={editCapabilities.data}
+        onUpdated={closeAfterSingleEdit}
+      />
+
+      {bulkMode !== null && (
+        <BulkEditSheet
+          ref={bulk}
+          filter={query}
+          mode={bulkMode}
+          items={items}
+          total={totals?.total}
+          masters={mastersData}
+          capabilities={editCapabilities.data}
+          onCancel={() => bulk.current?.close()}
+          onUpdated={refreshAfterEdit}
+        />
+      )}
 
       <FilterSheet
         ref={sheet}
