@@ -37,6 +37,7 @@ function transaction(overrides: Partial<Transaction> = {}): Transaction {
     place: "",
     comment: "",
     currency_code: "JPY",
+    receipt_id: null,
     ...overrides,
   };
 }
