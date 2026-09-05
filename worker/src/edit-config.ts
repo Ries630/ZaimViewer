@@ -21,7 +21,9 @@ export function editCapabilitiesOf(env: EditEnvironment): EditCapabilities {
     (env.EDIT_VERIFIED_MODES ?? "").split(",").filter(Boolean),
   );
   const transfer = env.EDIT_TRANSFER_VERIFIED === "true";
-  const modes = parsed.success ? parsed.output.filter((mode) => mode !== "transfer" || transfer) : [];
+  const modes = parsed.success
+    ? parsed.output.filter((mode) => mode !== "transfer" || transfer)
+    : [];
   const enabled = env.EDIT_ENABLED === "true" && modes.length > 0;
   return {
     enabled,
