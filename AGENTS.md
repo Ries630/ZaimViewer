@@ -8,7 +8,7 @@ Zaim のフィルタ機能が弱く、自動連携の細かな履歴や振替に
 ```
 Zaim API ──同期(手元の Mac mini で実行)──▶ D1
                                           ▲
-                                          │ read
+                                          │ read / 照合済みの編集結果を反映
                         Cloudflare Workers │
                         ┌─────────────────┴──────────────┐
                         │ Hono: 読み取り API + 編集プロキシ │──▶ PWA (React+Vite)
@@ -90,9 +90,10 @@ PNG は `./scripts/make-icons.sh` で作り直す。
 テーマから外れるので使わない（[ADR-0022](docs/adr/0022-daisyui-for-form-components.md)）。
 テーマは端末の設定に従う（[ADR-0024](docs/adr/0024-dark-mode-follows-device.md)）。
 
-**工程 ③ 編集機能: 未着手。** 単体編集 → フィルタ結果への一括編集。
-いずれも Zaim 更新 API へ順次反映する。署名側は POST + フォームボディまで
-検証済みなので、`ZaimClient` に更新系メソッドを足すところから始められる。
+**工程 ③ 編集機能: 実装済み・公開前検証中。** 単体編集とフィルタ結果への一括編集は
+サーバーに保存した計画を一件ずつ実行する。Zaim 更新後の再取得・照合が成功した明細だけを
+D1 に反映し、全件同期とは処理ゲートを共有する。
+公開設定と実データ検証・復旧の手順は [`ops/editing.md`](ops/editing.md) を参照する。
 
 ## 技術選定
 
@@ -192,6 +193,8 @@ Safari と Cookie ストアが別で、初回だけ Google のログイン画面
 | 指示ファイルを `AGENTS.md` に移し、`CLAUDE.md` はインポートだけにする | [0031](docs/adr/0031-agents-md-as-instruction-source.md) |
 | anti-slop の Oxlint プラグインをベンダリングし、ルールを段階的に有効にする | [0032](docs/adr/0032-anti-slop-lint-rules.md) |
 | 入力検証は valibot に一本化する。Worker もクライアントも同じ | [0034](docs/adr/0034-valibot-for-validation.md) |
+| 編集後は Zaim の再取得値を照合してミラーへ反映し、全件同期と共有排他を取る | [0036](docs/adr/0036-refresh-edited-mirror-with-shared-gate.md) |
+| 編集対象と変更内容を計画として固定し、画面から一件ずつ実行する | [0037](docs/adr/0037-foreground-edit-plans.md) |
 
 以下はコードとテストが守っているもので、ADR にはしていない。
 
@@ -360,9 +363,8 @@ Cloudflare の認証情報（`Account > D1 > Edit` のトークン）が必要
 
 ## 残っている作業
 
-1. 工程 ③ の編集プロキシ（`ZaimClient` に更新系メソッドを足すところから）。
-   `wrangler secret put` で Zaim の認証情報を入れるのもここ。同期を Worker の外へ
-   出したので、それまで本番に認証情報は要らない。
+1. 工程 ③ の実データ・実機検証と公開。準備と承認範囲は
+   [`ops/editing.md`](ops/editing.md) を参照する。
 
    **Zaim の PUT は部分更新。ただし `amount` だけが例外で、省略すると 0 になる**
    （2026-08-18 に検証用の明細を作って生 API で実測）。`date` / `category_id` /
