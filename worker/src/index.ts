@@ -11,11 +11,9 @@
 import { vValidator } from "@hono/valibot-validator";
 import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
-import { HTTPException } from "hono/http-exception";
 
 import { accessGuard } from "./access";
 import { editCapabilitiesOf } from "./edit-config";
-import { EditError } from "./edit-contract";
 import { transactionQuery, toDatabaseFilter } from "./transaction-filter";
 import { credentialsOf, type Env } from "./environment";
 import { editRoutes } from "./edit-routes";
@@ -51,25 +49,6 @@ app.use("/api/*", async (c, next) => {
     }
   }
   return await next();
-});
-
-/** 外部応答や家計データを例外本文から露出させない。 */
-app.onError((error, c) => {
-  if (error instanceof EditError) {
-    return c.json({ error: { code: error.code, message: error.message } }, error.status);
-  }
-  if (error instanceof HTTPException && error.status === 400) {
-    return c.json({ error: { code: "invalid_input", message: "送信内容を確認してください" } }, 400);
-  }
-  return c.json(
-    {
-      error: {
-        code: "internal_error",
-        message: "処理結果を取得できませんでした。再送せず状態を確認してください",
-      },
-    },
-    500,
-  );
 });
 
 /**
