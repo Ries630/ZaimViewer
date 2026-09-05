@@ -13,6 +13,12 @@ ZAIM_ACCESS_TOKEN_SECRET=
 # wrangler.jsonc の "production" を上書きし、POST /api/sync を開ける
 ENVIRONMENT=development
 
+# 編集の公開設定と検証手順は ops/editing.md を参照する。
+EDIT_ENABLED=false
+EDIT_VERIFIED_MODES=payment,income
+EDIT_INCOME_NAME_VERIFIED=false
+EDIT_TRANSFER_VERIFIED=false
+
 # Cloudflare D1 の HTTP API（scripts/sync.ts が手元から書き込むのに使う）。
 # トークンは Account > D1 > Edit 権限だけで足りる。
 # D1_DATABASE_ID は wrangler.jsonc の database_id と同じ値。
