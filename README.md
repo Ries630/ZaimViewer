@@ -51,7 +51,8 @@ flowchart TD
   access -- "エッジの判定のみ" --> assets
   access -- "Worker 側でも JWT を検証" --> api
   api -- "read（Drizzle）" --> d1
-  api -. "工程 ③（未着手）: 更新" .-> zaim
+  api -. "編集（公開前検証中）: 更新・再取得" .-> zaim
+  api -. "照合済み明細を反映" .-> d1
   sync -- "全件取得（OAuth1.0a）" --> zaim
   sync -- "D1 HTTP API で差し替え" --> d1
 ```
@@ -76,11 +77,14 @@ flowchart TD
 |---|---|
 | ① 同期基盤（Zaim → D1） | 完了。Zaim から全件取得して差し替える。実測 22 秒 |
 | ② 読み取り API + PWA | 完了。一覧・フィルタ・明細の詳細まで。iPhone のホーム画面から standalone で起動する |
-| ③ 編集機能（編集プロキシ・一括編集） | 未着手（[#6](https://github.com/Ries630/ZaimViewer/issues/6)） |
+| ③ 編集機能（編集プロキシ・一括編集） | 単体・一括編集を実装。実データと実機による公開前検証中（[#6](https://github.com/Ries630/ZaimViewer/issues/6)） |
 
 **既知の欠け: ミラーは Zaim の全件ではない。** 金融機関連携で取り込まれた明細の
 一部が Zaim の API から返らず、画面にも出てこない
 （[#33](https://github.com/Ries630/ZaimViewer/issues/33)）。
+
+編集機能の公開手順と中断後の復旧は [編集の運用手順](ops/editing.md) を参照する。
+公開前検証が済むまでは編集を無効にしている。
 
 ## ディレクトリの読み方
 

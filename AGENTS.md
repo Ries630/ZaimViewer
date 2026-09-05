@@ -8,7 +8,7 @@ Zaim のフィルタ機能が弱く、自動連携の細かな履歴や振替に
 ```
 Zaim API ──同期(手元の Mac mini で実行)──▶ D1
                                           ▲
-                                          │ read
+                                          │ read / 照合済みの編集結果を反映
                         Cloudflare Workers │
                         ┌─────────────────┴──────────────┐
                         │ Hono: 読み取り API + 編集プロキシ │──▶ PWA (React+Vite)
@@ -114,6 +114,8 @@ Safari と Cookie ストアが別で、初回だけ Google のログイン画面
 | 指示ファイルを `AGENTS.md` に移し、`CLAUDE.md` はインポートだけにする | [0031](docs/adr/0031-agents-md-as-instruction-source.md) |
 | anti-slop の Oxlint プラグインをベンダリングし、ルールを段階的に有効にする | [0032](docs/adr/0032-anti-slop-lint-rules.md) |
 | 入力検証は valibot に一本化する。Worker もクライアントも同じ | [0034](docs/adr/0034-valibot-for-validation.md) |
+| 編集後は Zaim の再取得値を照合してミラーへ反映し、全件同期と共有排他を取る | [0036](docs/adr/0036-refresh-edited-mirror-with-shared-gate.md) |
+| 編集対象と変更内容を計画として固定し、画面から一件ずつ実行する | [0037](docs/adr/0037-foreground-edit-plans.md) |
 
 以下はコードとテストが守っているもので、ADR にはしていない。
 
@@ -218,6 +220,8 @@ bun run db:init     # 本番 D1 に空のミラーを作る（既存テーブル
 bun run deploy      # ビルドして本番へ（マージ後）
 bunx wrangler tail  # デプロイ後のリクエストログ
 ```
+
+編集機能の公開設定と実データ検証・復旧の手順は [`ops/editing.md`](ops/editing.md) を参照する。
 
 **画面に出る変更は、マージ前に Preview へ上げて実機で見る。** 手順は
 `bun run build` のあと `bunx wrangler versions upload -c dist/zaimviewer/wrangler.json`。
