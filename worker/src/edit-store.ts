@@ -95,3 +95,17 @@ export async function readEditPlan(db: Database, id: string): Promise<string | n
 export async function saveEditPlan(db: Database, id: string, payload: string): Promise<void> {
   await db.prepare("UPDATE edit_plans SET payload = ? WHERE id = ?").bind(payload, id).run();
 }
+
+/** 未照合の外部更新結果を持つ編集計画があるか調べる。 */
+export async function hasUnresolvedEditPlans(db: Database): Promise<boolean> {
+  const row = await db
+    .prepare(
+      `SELECT edit_plans.id
+       FROM edit_plans
+       JOIN json_each(edit_plans.payload, '$.items') AS item
+       WHERE json_extract(item.value, '$.status') IN ('sending', 'unknown', 'mirror_pending')
+       LIMIT 1`,
+    )
+    .first<{ id: string }>();
+  return row !== null;
+}

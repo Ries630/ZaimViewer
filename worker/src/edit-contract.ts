@@ -4,6 +4,8 @@ import { MAX_AMOUNT } from "./limits";
 
 /** 初期版で一度に確認・実行できる明細数。実機測定後に再評価する。 */
 export const MAX_EDIT_ITEMS = 50;
+/** 編集用検索で 1 文へ渡す bind 数。D1 の 100 個制限に 20 個の余裕を残す。 */
+export const MAX_EDIT_FILTER_BINDINGS = 80;
 /** 計画を新規実行できる期間。結果照合には適用しない。 */
 export const EDIT_PLAN_TTL_MS = 30 * 60 * 1000;
 /** 外部更新間の最小待機時間。Zaim の保証値ではなく既存運用から引き継ぐ初期値。 */

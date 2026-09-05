@@ -4,6 +4,8 @@
  * fetch と Web Crypto のみで動くため Workers 上でそのまま走る。
  */
 
+import type { EditChanges, EditMode } from "./edit-contract";
+import { EDIT_REQUEST_TIMEOUT_MS, MAX_EDIT_LOOKUP_PAGES } from "./edit-contract";
 import { type OAuth1Credentials, signRequest } from "./oauth1";
 
 const BASE_URL = "https://api.zaim.net/v2";
@@ -13,6 +15,19 @@ const PAGE_LIMIT = 100;
 
 /** 連続リクエスト間の待機ミリ秒（レート制限への配慮）。 */
 const REQUEST_INTERVAL_MS = 300;
+
+/** Zaim の更新フォーム。キーを増やす場合も mapping と文字列値を保つ。 */
+interface MoneyUpdateForm {
+  mapping: string;
+  [key: string]: string;
+}
+
+/** 部分更新フォームへ載せる値を文字列化する。undefined は省略する。 */
+type MoneyUpdateValue = string | number | null | undefined;
+function encodeMoneyUpdateValue(value: MoneyUpdateValue): string | undefined {
+  if (value === undefined) return undefined;
+  return value === null ? "" : String(value);
+}
 
 /** Zaim の明細 1 件（必要な列のみ。実際は他のキーも含む）。 */
 export interface ZaimMoney {
@@ -74,22 +89,35 @@ export class ZaimClient {
    * @returns レスポンス JSON。
    * @throws HTTP ステータスが 200 以外の場合。
    */
-  async #get<T>(path: string, params: Record<string, string> = {}): Promise<T> {
+  async #get<T>(path: string, params: Record<string, string> = {}, timeoutMs?: number): Promise<T> {
     const url = new URL(BASE_URL + path);
     for (const [key, value] of Object.entries(params)) {
       url.searchParams.set(key, value);
     }
 
     const { authorization } = await signRequest("GET", url.toString(), this.#credentials);
-    const res = await this.#fetch(url, { headers: { Authorization: authorization } });
-
-    if (res.status !== 200) {
-      const body = await res.text();
-      throw new Error(`Zaim API error ${res.status}: ${body.slice(0, 500)}`);
+    const controller = timeoutMs === undefined ? undefined : new AbortController();
+    const timeout =
+      timeoutMs === undefined ? undefined : setTimeout(() => controller?.abort(), timeoutMs);
+    try {
+      const res = await this.#fetch(url, {
+        headers: { Authorization: authorization },
+        ...(controller === undefined ? {} : { signal: controller.signal }),
+      }).catch(() => {
+        throw new Error("Zaim API への通信結果を確認できませんでした");
+      });
+      if (res.status !== 200) {
+        await res.body?.cancel();
+        throw new Error(`Zaim API error ${res.status}`);
+      }
+      // SAFETY: 各呼び出し元が期待する Zaim 応答の型を指定し、編集経路では
+      // 保存エンジンが snapshot と raw を照合する。
+      return (await res.json().catch(() => {
+        throw new Error("Zaim API の応答を読み取れませんでした");
+      })) as T;
+    } finally {
+      if (timeout !== undefined) clearTimeout(timeout);
     }
-    // SAFETY: 呼び出し側が Zaim のドキュメントに沿って T を指定する。
-    // ステータスは直前に 200 だけに絞ってある
-    return (await res.json()) as T;
   }
 
   /**
@@ -112,8 +140,47 @@ export class ZaimClient {
     });
 
     if (res.status !== 200) {
-      const body = await res.text();
-      throw new Error(`Zaim API error ${res.status}: ${body.slice(0, 500)}`);
+      await res.body?.cancel();
+      throw new Error(`Zaim API error ${res.status}`);
+    }
+  }
+
+  /**
+   * 署名付きフォーム PUT を送る。
+   *
+   * 編集 API のエラー本文には明細やアカウント情報が含まれる可能性があるため、
+   * 呼び出し側へ本文を渡さない。外部更新後の結果不明を安全側に扱うため、
+   * ステータスだけをエラーへ残す。
+   *
+   * @param path BASE_URL からの相対パス（先頭 / 付き）。
+   * @param params フォームボディ。
+   * @throws HTTP ステータスが 200 以外の場合。
+   */
+  async #put(path: string, params: Record<string, string>): Promise<void> {
+    const url = BASE_URL + path;
+    const { authorization } = await signRequest("PUT", url, this.#credentials, params);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), EDIT_REQUEST_TIMEOUT_MS);
+    let res: Response;
+    try {
+      res = await this.#fetch(url, {
+        method: "PUT",
+        headers: {
+          Authorization: authorization,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams(params),
+        signal: controller.signal,
+      });
+    } catch {
+      throw new Error("Zaim API への通信結果を確認できませんでした");
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    await res.body?.cancel();
+    if (res.status !== 200) {
+      throw new Error(`Zaim API error ${res.status}`);
     }
   }
 
@@ -163,32 +230,58 @@ export class ZaimClient {
    * Zaim の一覧 API に ID フィルタが無いため、日付と mode で絞ったページを走査する。
    * 更新直前の amount と receipt_id を確認する用途で使う。
    *
-   * @param mode 支出または収入。
+   * @param mode 支出・収入・振替。
    * @param id 明細 ID。
    * @param date 現在の明細日。
    * @returns 最新の明細。指定日に見つからなければ undefined。
    */
-  async moneyById(
-    mode: ReceiptIdUpdateMode,
-    id: number,
-    date: string,
-  ): Promise<ZaimMoney | undefined> {
+  async moneyById(mode: EditMode, id: number, date: string): Promise<ZaimMoney | undefined> {
     let page = 1;
     for (;;) {
-      const data = await this.#get<{ money: ZaimMoney[] }>("/home/money", {
-        mapping: "1",
-        mode,
-        start_date: date,
-        end_date: date,
-        limit: String(PAGE_LIMIT),
-        page: String(page),
-      });
+      const data = await this.#get<{ money: ZaimMoney[] }>(
+        "/home/money",
+        {
+          mapping: "1",
+          mode,
+          start_date: date,
+          end_date: date,
+          limit: String(PAGE_LIMIT),
+          page: String(page),
+        },
+        EDIT_REQUEST_TIMEOUT_MS,
+      );
       const found = data.money.find((item) => item.id === id && item.mode === mode);
       if (found) return found;
       if (data.money.length < PAGE_LIMIT) return undefined;
+      if (page >= MAX_EDIT_LOOKUP_PAGES) {
+        throw new Error("Zaim API の明細検索上限を超えました");
+      }
       page += 1;
       await sleep(REQUEST_INTERVAL_MS);
     }
+  }
+
+  /**
+   * 既存明細を部分更新する。
+   *
+   * amount は Zaim API の仕様上、省略すると 0 になるため呼び出し側で必須にする。
+   * undefined の項目は送らず、null は空文字として明示的な消去に変換する。
+   *
+   * @param mode 更新する明細種別。
+   * @param id 更新する明細 ID。
+   * @param changes 変更項目。amount は必須。
+   */
+  async updateMoney(
+    mode: EditMode,
+    id: number,
+    changes: EditChanges & { amount: number },
+  ): Promise<void> {
+    const params: MoneyUpdateForm = { mapping: "1" };
+    for (const [key, value] of Object.entries(changes)) {
+      const encoded = encodeMoneyUpdateValue(value);
+      if (encoded !== undefined) params[key] = encoded;
+    }
+    await this.#put(`/home/money/${mode}/${id}`, params);
   }
 
   /**
