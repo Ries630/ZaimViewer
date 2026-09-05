@@ -8,7 +8,9 @@
  */
 
 import type { Database, PreparedStatement } from "./db";
-import { ZaimClient, type ZaimMaster } from "./zaim";
+import { acquireMutation, releaseMutation } from "./edit-store";
+import { TRANSACTION_COLUMNS, transactionValues } from "./mirror-write";
+import { ZaimClient, type ZaimMaster, type ZaimMoney } from "./zaim";
 
 /** 1 回の batch() に載せるステートメント数。D1 の 1 バッチ上限に対する安全側の値。 */
 const BATCH_SIZE = 100;
@@ -19,25 +21,6 @@ const MASTER_COLUMNS = {
   genres: ["id", "category_id", "name", "sort", "active"],
   accounts: ["id", "name", "sort", "active"],
 } as const;
-
-/** 明細テーブルの列（raw を除く）。 */
-const TRANSACTION_COLUMNS = [
-  "id",
-  "mode",
-  "date",
-  "amount",
-  "category_id",
-  "genre_id",
-  "from_account_id",
-  "to_account_id",
-  "name",
-  "place",
-  "comment",
-  "currency_code",
-  "receipt_id",
-  "active",
-  "created",
-] as const;
 
 /** 同期の所要時間内訳（ミリ秒）。CPU 時間の見積もりに使う。 */
 export interface SyncTimings {
@@ -179,6 +162,35 @@ function insertStatements(
   );
 }
 
+/** 明細行を同期用 INSERT 文のバインド済みステートメントへ変換する。 */
+function insertTransactionStatements(
+  db: Database,
+  table: string,
+  rows: readonly ZaimMoney[],
+): PreparedStatement[] {
+  const placeholders = TRANSACTION_COLUMNS.map(() => "?")
+    .concat("?")
+    .join(", ");
+  const stmt = db.prepare(
+    `INSERT INTO ${table} (${TRANSACTION_COLUMNS.join(", ")}, raw) VALUES (${placeholders})`,
+  );
+  return rows.map((row) => stmt.bind(...transactionValues(row)));
+}
+
+/** 編集計画に未照合の明細が残っているかを JSON1 で検査する。 */
+async function hasUnresolvedEditPlan(db: Database): Promise<boolean> {
+  const row = await db
+    .prepare(
+      `SELECT edit_plans.id
+       FROM edit_plans
+       JOIN json_each(edit_plans.payload, '$.items') AS item
+       WHERE json_extract(item.value, '$.status') IN ('sending', 'unknown', 'mirror_pending')
+       LIMIT 1`,
+    )
+    .first<{ id: string }>();
+  return row !== null;
+}
+
 /**
  * Zaim から全件取得してミラー DB を再構築する。
  *
@@ -187,7 +199,7 @@ function insertStatements(
  * @returns 件数・同期時刻・所要時間の内訳。
  * @throws 明細が 0 件だった場合（API 異常の可能性があるため差し替えを中止する）。
  */
-export async function syncAll(db: Database, client: ZaimClient): Promise<SyncResult> {
+async function runSync(db: Database, client: ZaimClient): Promise<SyncResult> {
   const t0 = Date.now();
   let fetchMs = 0;
   let transformMs = 0;
@@ -212,7 +224,7 @@ export async function syncAll(db: Database, client: ZaimClient): Promise<SyncRes
     if (done) break;
 
     const t = Date.now();
-    const statements = insertStatements(db, "transactions_new", TRANSACTION_COLUMNS, value);
+    const statements = insertTransactionStatements(db, "transactions_new", value);
     transformMs += Date.now() - t;
 
     const w = Date.now();
@@ -270,4 +282,32 @@ export async function syncAll(db: Database, client: ZaimClient): Promise<SyncRes
     syncedAt,
     timings: { fetchMs, transformMs, writeMs, swapMs, totalMs: Date.now() - t0 },
   };
+}
+
+/**
+ * Zaim から全件取得してミラー DB を再構築する。
+ *
+ * 取得開始からテーブル差し替え完了まで共有ゲートを保持し、未照合の編集計画が
+ * 残っている場合は取得を開始せず保留する。外部から強制終了されたゲートは
+ * 自動取得しないため、運用手順に従って状態を確認して復旧する。
+ *
+ * @param db ミラー DB。
+ * @param client Zaim クライアント。
+ * @returns 件数・同期時刻・所要時間の内訳。
+ * @throws 明細が 0 件だった場合、別処理が実行中の場合、未照合編集計画がある場合。
+ */
+export async function syncAll(db: Database, client: ZaimClient): Promise<SyncResult> {
+  const owner = `sync:${crypto.randomUUID()}`;
+  if (!(await acquireMutation(db, owner, "sync"))) {
+    throw new Error("別の同期または編集が処理中のため同期を保留");
+  }
+
+  try {
+    if (await hasUnresolvedEditPlan(db)) {
+      throw new Error("未照合の編集計画があるため同期を保留");
+    }
+    return await runSync(db, client);
+  } finally {
+    await releaseMutation(db, owner);
+  }
 }
