@@ -38,6 +38,18 @@ it("明細一覧を RPC クライアントから叩ける", async () => {
   expect(body.items.map((item) => item.id)).toEqual([5, 2, 1]);
 });
 
+it("品名編集の判定に使う receipt_id を型付きで返す", async () => {
+  await env.DB.prepare("UPDATE transactions SET receipt_id = ? WHERE id = 1")
+    .bind(4_200_000_001)
+    .run();
+  const res = await client.api.transactions.$get({ query: { limit: "3" } });
+  if (res.status !== 200) throw new Error(`想定外のステータス: ${res.status}`);
+  const body = await res.json();
+  expectTypeOf(body.items[0]!.receipt_id).toEqualTypeOf<number | null>();
+  expect(body.items.find((item) => item.id === 1)?.receipt_id).toBe(4_200_000_001);
+  expect(body.items.find((item) => item.id === 2)?.receipt_id).toBeNull();
+});
+
 it("マスタと同期メタも型付きで取れる", async () => {
   const masters = await (await client.api.masters.$get()).json();
   expect(masters.categories).toHaveLength(3);
