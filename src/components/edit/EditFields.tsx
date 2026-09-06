@@ -2,6 +2,7 @@
 
 import type { Masters } from "../../api/masters";
 import type { EditDraft, EditField, EditMode } from "../../lib/edit";
+import { editMasterOptions, type EditMasterOption } from "../../lib/edit-masters";
 import { categoriesForModes, genresForCategories } from "../../lib/masters";
 import { MAX_EDIT_TEXT_LENGTH } from "../../../worker/src/edit-contract";
 import { MAX_AMOUNT } from "../../../worker/src/limits";
@@ -76,7 +77,7 @@ function MasterSelect({
 }: {
   field: EditField;
   value: number | null;
-  options: { id: number; name: string | null }[];
+  options: EditMasterOption<{ id: number; name: string | null; active: number | null }>[];
   disabled: boolean;
   onChange: (value: number | null) => void;
 }) {
@@ -95,7 +96,7 @@ function MasterSelect({
         未設定
       </option>
       {options.map((option) => (
-        <option key={option.id} value={option.id}>
+        <option key={option.id} value={option.id} disabled={option.disabled}>
           {option.name ?? `ID ${option.id}`}
         </option>
       ))}
@@ -118,10 +119,12 @@ export function EditFields({
   selected,
   onToggle,
 }: EditFieldsProps) {
-  const categories = masters ? categoriesForModes(masters.categories, [mode]) : [];
-  const genres = masters
+  const categoryMasters = masters ? categoriesForModes(masters.categories, [mode]) : [];
+  const genreMasters = masters
     ? genresForCategories(masters.genres, draft.category_id ? [draft.category_id] : [])
     : [];
+  const categories = editMasterOptions(categoryMasters, draft.category_id);
+  const genres = editMasterOptions(genreMasters, draft.genre_id);
   const accounts = accountOptions(masters);
   const isSelected = (field: EditField) => selected?.has(field) ?? true;
   const isDisabled = (field: EditField) => selected !== undefined && !isSelected(field);
@@ -200,7 +203,7 @@ export function EditFields({
             <MasterSelect
               field={field}
               value={draft[field]}
-              options={accounts}
+              options={editMasterOptions(accounts, draft[field])}
               disabled={isDisabled(field) || accounts.length === 0}
               onChange={(value) => onChange({ ...draft, [field]: value })}
             />
