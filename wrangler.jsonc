@@ -18,6 +18,11 @@
     // ローカル開発では .dev.vars の ENVIRONMENT=development が上書きする。
     // POST /api/sync を本番で閉じるのと、Access の JWT 検証の有無に使う
     "ENVIRONMENT": "production",
+    // 実データでの検証と同期プロセスの切替後に有効化する（ops/editing.md）。
+    "EDIT_ENABLED": "false",
+    "EDIT_VERIFIED_MODES": "payment,income",
+    "EDIT_INCOME_NAME_VERIFIED": "false",
+    "EDIT_TRANSFER_VERIFIED": "false",
     // Access の JWT 検証（src/access.ts）。どちらも秘密ではない
     // （知られても JWT は偽造できない）ので secret ではなくここに置く。
     // vars ならリポジトリに入るため、本番だけ入れ忘れる経路が無くなる

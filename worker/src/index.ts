@@ -11,123 +11,16 @@
 import { vValidator } from "@hono/valibot-validator";
 import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
-import * as v from "valibot";
 
-import { type AccessEnv, accessGuard } from "./access";
-import { MAX_AMOUNT, MAX_QUERY_BYTES, withinQueryByteLimit } from "./limits";
-import { type OAuth1Credentials } from "./oauth1";
-import {
-  countTransactions,
-  fetchMasters,
-  fetchTransactions,
-  type TransactionFilter,
-} from "./queries";
+import { accessGuard } from "./access";
+import { editCapabilitiesOf } from "./edit-config";
+import { transactionQuery, toDatabaseFilter } from "./transaction-filter";
+import { credentialsOf, type Env } from "./environment";
+import { editRoutes } from "./edit-routes";
+import { countTransactions, fetchMasters, fetchTransactions } from "./queries";
 import { syncMeta } from "./schema";
 import { syncAll } from "./sync";
 import { ZaimClient } from "./zaim";
-
-/** Worker の環境バインディング。 */
-interface Env extends AccessEnv {
-  DB: D1Database;
-  ZAIM_CONSUMER_KEY: string;
-  ZAIM_CONSUMER_SECRET: string;
-  ZAIM_ACCESS_TOKEN: string;
-  ZAIM_ACCESS_TOKEN_SECRET: string;
-}
-
-/** 1 リクエストで返す明細の上限。無限スクロール 1 ページ分を想定。 */
-const DEFAULT_LIMIT = 100;
-const MAX_LIMIT = 1000;
-
-/** 日付パラメータの書式。 */
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
-/**
- * 環境変数から認証情報を組み立てる。
- *
- * @param env Worker の環境バインディング。
- * @returns OAuth1.0a 認証情報。
- */
-function credentialsOf(env: Env): OAuth1Credentials {
-  return {
-    consumerKey: env.ZAIM_CONSUMER_KEY,
-    consumerSecret: env.ZAIM_CONSUMER_SECRET,
-    accessToken: env.ZAIM_ACCESS_TOKEN,
-    accessTokenSecret: env.ZAIM_ACCESS_TOKEN_SECRET,
-  };
-}
-
-/**
- * 繰り返し指定されうるクエリパラメータを配列に正規化する。
- *
- * `?mode=payment&mode=income` は配列で届くが、1 個だけなら文字列で届く。
- * 呼び出し側で分岐したくないので、ここで必ず配列に揃える。
- *
- * @param item 各要素のスキーマ。
- * @returns 配列に正規化するスキーマ。
- */
-function repeatable<T extends v.GenericSchema>(item: T) {
-  // `v.optional` で包むのは、未指定のときに配列化を走らせないため。
-  // 中で分岐すると `[undefined]` になり、要素の検証で落ちる
-  return v.optional(
-    v.pipe(
-      v.unknown(),
-      v.transform((value) => (Array.isArray(value) ? value : [value])),
-      v.array(item),
-    ),
-  );
-}
-
-/**
- * クエリ文字列の整数。
- *
- * クエリは必ず文字列で届くので、数値に直してから整数か確かめる。valibot には
- * `z.coerce.number()` に当たる入口が無いぶん、変換を pipe に書き下す。
- *
- * **`v.integer()` ではなく `v.safeInteger()` を使う。** 前者は
- * `Number.isInteger` そのままで、`9007199254740993`（丸められて整数になる）も
- * `1e30` も通してしまう。zod の `.int()` は安全な整数の範囲で弾いていたので、
- * ここを合わせないと桁あふれした値が SQL に渡る。
- *
- * @returns 文字列を整数に直すスキーマ。
- */
-const coercedInt = () => v.pipe(v.string(), v.transform(Number), v.number(), v.safeInteger());
-
-/**
- * 明細一覧のクエリパラメータ。
- *
- * すべてのフィルタは未指定なら条件を課さない。「振替を除外」「今日以前だけ」
- * といった既定は API 側に持たせず、呼び出し側（PWA）が明示する。
- *
- * `limit` と `offset` の既定値が文字列なのは、`v.optional` の第 2 引数が
- * 変換前（= クエリ文字列）の型で渡す約束になっているため。
- */
-const transactionQuery = v.object({
-  date_from: v.optional(v.pipe(v.string(), v.regex(DATE_PATTERN))),
-  date_to: v.optional(v.pipe(v.string(), v.regex(DATE_PATTERN))),
-  mode: repeatable(v.string()),
-  category_id: repeatable(coercedInt()),
-  genre_id: repeatable(coercedInt()),
-  account_id: repeatable(coercedInt()),
-  amount_min: v.optional(v.pipe(coercedInt(), v.minValue(0), v.maxValue(MAX_AMOUNT))),
-  amount_max: v.optional(v.pipe(coercedInt(), v.minValue(0), v.maxValue(MAX_AMOUNT))),
-  q: v.optional(
-    v.pipe(
-      v.string(),
-      v.check(
-        withinQueryByteLimit,
-        `キーワードは UTF-8 で ${MAX_QUERY_BYTES} バイト以内（D1 の LIKE パターン長制限）`,
-      ),
-    ),
-  ),
-  exclude_place: repeatable(v.string()),
-  exclude_genre_id: repeatable(coercedInt()),
-  limit: v.optional(
-    v.pipe(coercedInt(), v.minValue(1), v.maxValue(MAX_LIMIT)),
-    String(DEFAULT_LIMIT),
-  ),
-  offset: v.optional(v.pipe(coercedInt(), v.minValue(0)), "0"),
-});
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -139,6 +32,25 @@ const app = new Hono<{ Bindings: Env }>();
  */
 app.use("*", accessGuard);
 
+/** 編集要求は Access の Cookie に加えて同一オリジンを確認する。 */
+app.use("/api/*", async (c, next) => {
+  if (c.req.path.startsWith("/api/edit-plans") && c.req.method !== "GET") {
+    if (c.req.header("Origin") !== new URL(c.req.url).origin) {
+      return c.json(
+        { error: { code: "origin_mismatch", message: "同じアプリから操作してください" } },
+        403,
+      );
+    }
+    if (c.req.header("Content-Type")?.split(";")[0]?.trim() !== "application/json") {
+      return c.json(
+        { error: { code: "invalid_content_type", message: "JSON で送信してください" } },
+        400,
+      );
+    }
+  }
+  return await next();
+});
+
 /**
  * ルート定義。
  *
@@ -148,6 +60,9 @@ app.use("*", accessGuard);
  * PWA 側の `hc<AppType>` がどのルートも認識できなくなる。
  */
 const routes = app
+  /** 実機で確認して公開した編集能力を返す。 */
+  .get("/api/edit-capabilities", (c) => c.json(editCapabilitiesOf(c.env)))
+  .route("/api", editRoutes)
   /**
    * 明細を日付の新しい順に返す。
    *
@@ -156,19 +71,7 @@ const routes = app
    */
   .get("/api/transactions", vValidator("query", transactionQuery), async (c) => {
     const params = c.req.valid("query");
-    const filter: TransactionFilter = {
-      dateFrom: params.date_from,
-      dateTo: params.date_to,
-      modes: params.mode,
-      categoryIds: params.category_id,
-      genreIds: params.genre_id,
-      accountIds: params.account_id,
-      amountMin: params.amount_min,
-      amountMax: params.amount_max,
-      q: params.q,
-      excludePlaces: params.exclude_place,
-      excludeGenreIds: params.exclude_genre_id,
-    };
+    const filter = toDatabaseFilter(params);
 
     const db = drizzle(c.env.DB);
     const [{ total, totalAmount }, items] = await Promise.all([
