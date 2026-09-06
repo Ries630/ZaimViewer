@@ -27,6 +27,14 @@ export type EditPlanItem = EditPlan["items"][number];
 /** 一件の処理状態。 */
 export type EditItemStatus = EditPlanItem["status"];
 
+/** 全対象の結果が成功または失敗で確定し、再開・照合が不要か判定する。 */
+export function isEditPlanSettled(plan: Pick<EditPlan, "items">): boolean {
+  return (
+    plan.items.length > 0 &&
+    plan.items.every((item) => item.status === "succeeded" || item.status === "failed")
+  );
+}
+
 /** UI の入力値。空文字は明示的に消す値として扱う。 */
 export interface EditDraft {
   /** 日付。 */

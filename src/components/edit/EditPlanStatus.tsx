@@ -13,6 +13,7 @@ import {
 import {
   EDIT_INTERVAL_MS,
   isEditExecutionUncertain,
+  isEditPlanSettled,
   readActivePlanId,
   storeActivePlanId,
   type EditChanges,
@@ -67,9 +68,10 @@ function activeStorage(): Storage | null {
  * @param executing 同じタブの別UIが実行中なら true。
  */
 export function setActivePlan(id: string | null, plan?: EditPlan, executing = false): void {
+  const activeId = plan && isEditPlanSettled(plan) ? null : id;
   const storage = activeStorage();
-  if (storage) storeActivePlanId(storage, id);
-  announceEditPlan(id, plan, executing);
+  if (storage) storeActivePlanId(storage, activeId);
+  announceEditPlan(activeId, plan, executing);
 }
 
 function statusText(plan: EditPlan): string {
@@ -142,6 +144,10 @@ export function EditPlanStatus({ onSettled }: { onSettled: () => void }) {
   const activityRef = useRef(activity);
   const stopRef = useRef({ requested: false });
   const plan = planQuery.data;
+  // 以前の画面で保存された計画も、再取得で結果が確定していれば追跡を終える。
+  useEffect(() => {
+    if (plan && isEditPlanSettled(plan)) setActivePlan(null);
+  }, [plan]);
   const reconcileItems = useMemo(
     () =>
       plan?.items.filter(
@@ -195,7 +201,7 @@ export function EditPlanStatus({ onSettled }: { onSettled: () => void }) {
       if (result.error) throw result.error;
       if (result.data) {
         queryClient.setQueryData(["edit-plan", result.data.id], result.data);
-        if (result.data.items.every((item) => item.status === "succeeded")) {
+        if (isEditPlanSettled(result.data)) {
           setActivePlan(null);
           onSettled();
         }
@@ -286,7 +292,7 @@ export function EditPlanStatus({ onSettled }: { onSettled: () => void }) {
         // 外部 API へ連続要求を詰めず、一件ずつ間隔を空ける。
         await new Promise((resolve) => window.setTimeout(resolve, EDIT_INTERVAL_MS));
       }
-      if (current.items.every((item) => item.status === "succeeded" || item.status === "failed")) {
+      if (isEditPlanSettled(current)) {
         setActivePlan(null);
       } else {
         setActivePlan(current.id, current, false);
@@ -323,7 +329,7 @@ export function EditPlanStatus({ onSettled }: { onSettled: () => void }) {
         queryClient.setQueryData(["edit-plan", current.id], current);
         setActivePlan(current.id, current, true);
       }
-      if (current.items.every((item) => item.status === "succeeded")) {
+      if (isEditPlanSettled(current)) {
         cleared = true;
         setActivePlan(null);
       } else {

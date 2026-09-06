@@ -9,12 +9,14 @@ import {
   draftOf,
   editableFields,
   isEditExecutionUncertain,
+  isEditPlanSettled,
   isEditSendBlocked,
   previewSnapshot,
   readActivePlanId,
   snapshotOf,
   storeActivePlanId,
   type EditCapabilities,
+  type EditItemStatus,
 } from "./edit";
 
 function transaction(overrides: Partial<Transaction> = {}): Transaction {
@@ -132,6 +134,34 @@ describe("編集値の組み立て", () => {
 });
 
 describe("編集中の計画 ID", () => {
+  it.each<EditItemStatus>(["pending", "sending", "unknown", "mirror_pending"])(
+    "%s が残る計画は追跡を継続する",
+    (status) => {
+      const before = snapshotOf(transaction());
+      expect(
+        isEditPlanSettled({
+          items: [
+            { before, status },
+            { before, status: "failed" },
+          ],
+        }),
+      ).toBe(false);
+    },
+  );
+
+  it("成功と失敗で全件が確定した計画は追跡を終了する", () => {
+    const before = snapshotOf(transaction());
+    expect(isEditPlanSettled({ items: [{ before, status: "failed" }] })).toBe(true);
+    expect(
+      isEditPlanSettled({
+        items: [
+          { before, status: "succeeded" },
+          { before, status: "failed" },
+        ],
+      }),
+    ).toBe(true);
+  });
+
   it("sessionStorage には計画 ID だけ保存し、消去できる", () => {
     const storage = new Map<string, string>();
     const fakeStorage = {
