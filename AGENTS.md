@@ -25,103 +25,25 @@ CPU 時間とクエリ数の上限のため（「デプロイの前提」参照�
 人向けに描いた同じ構成の図が [README](README.md) にある（Access と静的アセットの
 扱いまで含めたもの）。構成が変わったら 2 つとも直す。
 
-## 現在地（2026-08-11）
+## 現行機能と運用上の制約
 
-**工程 ① 同期基盤: 完了。** Zaim 全件 4,370 件（payment 3,272 / income 607 /
-transfer 491、2014-02〜2029-12。未来分は繰り返し登録の家賃）を本番 D1 にミラー済み。
-マスタは categories 46 / genres 129 / accounts 36。件数は同期のたびに増える。
+機能の現状は [README.md](README.md) と対象 Issue、コードで確認する。過去の同期件数や進捗スナップショットを現在値として使わない。
 
-**工程 ② 読み取り API: 完了。** `GET /api/transactions`（フィルタ + ページング）、
-`/api/masters`（フィルタ UI の選択肢）、`/api/meta`（同期の鮮度）、
-`POST /api/sync`（手動同期）。実データでの確認済み: 全 4,370 件 → 振替除外 3,879
-→ 未来分を隠して 3,839 → 1,000 円未満のノイズ除外で 1,881 件。
-
-なお `POST /api/sync` は**ローカル開発専用**で、本番では 404 を返す。CPU 時間と
-クエリ数の上限（下記）に引っかかるため、本番の同期は手元から実行する。
-
-**初回デプロイ: 完了。** https://zaimviewer.ries.workers.dev で読み取り API 3 本が
-応答する。D1 は `zaim-viewer`（APAC）。Cloudflare Access で保護済み。
-
-**同期スクリプト: 完了。** `worker/scripts/sync.ts` を手元から実行して本番 D1 を
-更新する。書き込みは D1 の HTTP API 経由（[ADR-0018](docs/adr/0018-d1-http-api-for-sync.md)）で、
-同期処理そのものは Worker と同じ `src/sync.ts`。実測 22 秒で全件差し替わる。
-定期実行は launchd（毎日 06:00）。手順は [`ops/README.md`](ops/README.md)。
-
-**工程 ② PWA: 一覧とフィルタまで完了。** React 19 + Vite 8 + TypeScript + Tailwind CSS v4 +
-TanStack Query。`@cloudflare/vite-plugin` で Worker と単一の dev サーバ（:5173）で動き、
-ビルド成果物は Static Assets として同じ Worker から配信される。RPC クライアントと
-Access セッション切れの検出は `src/api/` にある。**リポジトリルートがアプリのルート**で、
-`src/` がクライアント、`worker/src/` が Worker（[ADR-0020](docs/adr/0020-single-package-vite-worker.md)）。
-
-明細一覧は `useInfiniteQuery` + `IntersectionObserver` の無限スクロール
-（[#14](https://github.com/Ries630/ZaimViewer/issues/14)）。
-**一覧は仮想化していない**（測定値と再評価のサインは
-[ADR-0021](docs/adr/0021-no-list-virtualization.md)）。
-
-フィルタは「ヘッダ常設 + ボトムシート」（[#15](https://github.com/Ries630/ZaimViewer/issues/15)）。
-**既定は振替除外 + 未来を隠すの 2 段**で、初期表示は 4,370 件中 3,839 件から始まる。
-金額の下限は既定に置かない（情報を落とす条件なので画面で指定する）。状態は
-localStorage に永続化し、URL とは同期しない
-（[ADR-0026](docs/adr/0026-filter-defaults-and-persistence.md)）。
-
-明細の行はボタンで、タップすると詳細のボトムシートが開く
-（[#19](https://github.com/Ries630/ZaimViewer/issues/19)）。一覧では切り詰めている
-店舗・品名・メモを、畳まず折り返して全文で出す。**ここが工程 ③ の単体編集の入口に
-なる**ので、出す項目は Zaim の更新 API が受け付けるものに揃えてある
-（[ADR-0029](docs/adr/0029-detail-bottom-sheet-as-edit-entry.md)）。
-
-**PWA 化: 完了（[#16](https://github.com/Ries630/ZaimViewer/issues/16)）。**
-ホーム画面から standalone で起動し、セッションが切れても再認証して戻れることを
-iPhone で確認済み（「デプロイの前提」参照）。
-`vite-plugin-pwa` でマニフェストと Service Worker を出す。**Service Worker が
-precache するのはハッシュ付きの JS / CSS とアイコンだけで、ナビゲーションと
-`/api/*` には触らない**（[ADR-0028](docs/adr/0028-service-worker-precache-only.md)）。
-オフラインではアプリが起動しない代わりに、Access のセッションが切れたときの
-`location.reload()` が必ずネットワークに出る。アイコンは `public/icon.svg` が原本で、
-PNG は `./scripts/make-icons.sh` で作り直す。
-
-**アイコンのダーク版は渡せない。** iOS 18 以降はダーク版を持たないアイコンを OS が
-自動で暗くするので、緑地は端末がダークモードだと黒に近くなる。`apple-touch-icon` の
-`media="(prefers-color-scheme: dark)"` は iOS では効かず（スプラッシュ画像には効く）、
-マニフェストの `icons` にも配色を指定する項目が無い。iPhone 実機で確認済みなので、
-暗くなるのを直そうとしない。
-
-**色はすべて DaisyUI の semantic トークンで書く。** パレット直書き（`text-gray-500`）は
-テーマから外れるので使わない（[ADR-0022](docs/adr/0022-daisyui-for-form-components.md)）。
-テーマは端末の設定に従う（[ADR-0024](docs/adr/0024-dark-mode-follows-device.md)）。
-
-**工程 ③ 編集機能: 未着手。** 単体編集 → フィルタ結果への一括編集。
-いずれも Zaim 更新 API へ順次反映する。署名側は POST + フォームボディまで
-検証済みなので、`ZaimClient` に更新系メソッドを足すところから始められる。
+- `POST /api/sync` はローカル開発専用。本番の同期は手元の `worker/scripts/sync.ts` から行う。
+- 明細一覧は無限スクロールで、仮想化しない（[ADR-0021](docs/adr/0021-no-list-virtualization.md)）。詳細はボトムシートで全文表示する。
+- フィルタの既定は振替除外と未来分の非表示。金額下限の既定は設けず、状態は localStorage に保存する（[ADR-0026](docs/adr/0026-filter-defaults-and-persistence.md)）。
+- Service Worker はハッシュ付き静的アセットとアイコンの precache のみ。ナビゲーションと `/api/*` は扱わない（[ADR-0028](docs/adr/0028-service-worker-precache-only.md)）。
+- `public/icon.svg` をアイコンの原本とする。iOS のダークモードによるアイコンの暗色化は確認済みの OS 挙動として扱う。
+- 色は daisyUI の semantic トークンを使い、テーマは端末の設定に従う（[ADR-0022](docs/adr/0022-daisyui-for-form-components.md)、[ADR-0024](docs/adr/0024-dark-mode-follows-device.md)）。
 
 ## 技術選定
 
-| 領域 | 採用 | 主な理由 |
-|---|---|---|
-| 実行環境 | Cloudflare Workers | Mac mini 非依存。Cron Trigger で定期実行 |
-| DB | D1 | Workers のネイティブバインディング。認証トークンも外部通信も不要 |
-| フレームワーク | Hono | RPC で PWA と型を共有できる |
-| クエリ | Drizzle（読み取りのみ） | 列名を型で拾う。ドライバ非依存 |
-| 入力検証 | valibot + `@hono/valibot-validator` | pydantic 相当。Worker とクライアントで同じものを使う（ADR-0034） |
-| 型検査 | TypeScript 7（Go 実装） | 同じコードで 0.60 秒 → 0.07 秒 |
-| lint / format | oxlint + oxfmt + anti-slop | `oxlint-tsgolint` で型認識ルールが効く。anti-slop は 11 ルールを段階的に有効化（ADR-0032） |
-| テスト | vitest + `@cloudflare/vitest-pool-workers` | workerd 上で実物の D1 を使う |
-| パッケージ管理 | bun | peer dependency の解決が緩いので、更新時は要注意 |
-| PWA | React + Vite + `@cloudflare/vite-plugin` | Worker と単一の dev サーバで動き、同一オリジンで API を叩ける |
-| マニフェスト / SW | `vite-plugin-pwa`（`generateSW`） | 設定だけで済む。precache の範囲は絞る（ADR-0028） |
-| スタイル | Tailwind CSS v4（`@tailwindcss/vite`） | 設定ファイルを持たず CSS 側で完結する |
-| UI 部品 | DaisyUI 5 | #15 のフォーム部品。CSS 側の `@plugin` だけで載る |
-| データ取得 | TanStack Query | `useInfiniteQuery` が無限スクロールに、キャッシュがフィルタ切り替えに効く |
-| 日付演算 | `temporal-polyfill` | 相対期間（過去 3 か月）が月末で壊れない。整形は `Intl` のまま |
+採用理由と不採用案は [ADR 索引](docs/adr/README.md)、依存バージョンは `package.json` と `bun.lock` を参照する。
 
-**不採用にしたもの。** 理由と再評価のサインは各 ADR にある。
-
-- **Turso（libSQL）** — 制限だけ見れば D1 より上だが、実測でどれにも余裕がある
-  → [ADR-0010](docs/adr/0010-d1-as-mirror.md)
-- **Vite+** — 中身の oxlint / oxfmt は個別に採用済み
-  → [ADR-0013](docs/adr/0013-voidzero-toolchain.md)
-- **汎用ツール（Directus / NocoDB / Metabase）** — 編集プロキシが必須になり主価値が消えた
-  → [ADR-0001](docs/adr/0001-build-viewer-instead-of-generic-tools.md)
+- Worker: Hono、D1、読み取りの Drizzle、共有入力検証の valibot。
+- PWA: React、Vite、TanStack Query、Tailwind CSS と daisyUI。Worker と一つのパッケージで管理する。
+- 日付演算: `temporal-polyfill`。表示整形には `Intl` を使う。
+- 開発: Bun、TypeScript 7、oxlint・oxfmt・anti-slop、workerd 上の Vitest。
 
 ## デプロイの前提
 
@@ -255,7 +177,7 @@ DDL と差し替え処理をそのまま使うので、スキーマの写しは�
 全角の ￥ だが、Bun では半角の ¥ になる）。テストが固定しているのは workerd の
 出力で、そちらが CLDR とブラウザに一致する。
 
-**RPC のレスポンスは `src/api/client.ts` の `unwrap` を通す。** `zValidator` のある
+**RPC のレスポンスは `src/api/client.ts` の `unwrap` を通す。** 入力検証のある
 ルートは成功と 400 の union になり、`res.ok` で分岐しても `json()` の型は union の
 ままなので、型の側でも成功側を選び出す必要がある。判定は status で行う（成功側は
 `ContentfulStatusCode`、エラー側は `400` のリテラル）。
@@ -346,8 +268,7 @@ DOM と衝突するので採れない。本物の型による検査は `worker/t
 生成物の型ではなく宣言された型を経由する（`test/access-harness.ts` の `accessEnv`）。
 CI と同じ型で確かめたいときは `.dev.vars` を退避して `bun run cf-typegen` し直す。
 
-同期はローカルでは `curl -X POST http://localhost:5173/api/sync`（約 17 秒、44 リクエスト）。
-本番向けは `bun run sync`（約 22 秒）。運用手順は [`ops/README.md`](ops/README.md)。
+同期の実行手順とスケジュールは [`ops/README.md`](ops/README.md) を参照する。
 
 CI は GitHub Actions（`.github/workflows/ci.yml`）で、PR と main への push に
 `bun run check` を実行する。Zaim の認証情報も Cloudflare へのログインも要らない。
@@ -358,11 +279,9 @@ Cloudflare の認証情報（`Account > D1 > Edit` のトークン）が必要
 `mcpServers.zaim-api` に設定済みのものと同一。本番 Worker へは
 `wrangler secret put` で入れるが、工程 ③ まではその必要が無い。
 
-## 残っている作業
+## 編集 API を変更する場合
 
-1. 工程 ③ の編集プロキシ（`ZaimClient` に更新系メソッドを足すところから）。
-   `wrangler secret put` で Zaim の認証情報を入れるのもここ。同期を Worker の外へ
-   出したので、それまで本番に認証情報は要らない。
+編集の現状はコードと対象 Issue で確認し、次の確認済み制約を守る。
 
    **Zaim の PUT は部分更新。ただし `amount` だけが例外で、省略すると 0 になる**
    （2026-08-18 に検証用の明細を作って生 API で実測）。`date` / `category_id` /
@@ -376,7 +295,7 @@ Cloudflare の認証情報（`Account > D1 > Edit` のトークン）が必要
    **支出の品名（`name`）を編集できるのは `receipt_id` を持つ明細だけ。** 持たない支出は
    Zaim の UI が品名を表示も編集もしないため、そこへ書き込むと Zaim 側から
    見えない値になり、消すと復元できない。編集フォームでも PUT でも `name` を扱わない。
-   既存の支出 1,080 件には `receipt_id` を後付けする。収入と振替には独自採番しない。
+   既存支出への `receipt_id` の後付けは [#37](https://github.com/Ries630/ZaimViewer/issues/37) の移行範囲で扱う。収入と振替には独自採番しない。
    今後の移行でも、移行元の商品名・品目名を支出の `name` に保存するときだけ採番する
    （[ADR-0035](docs/adr/0035-itemized-receipt-id-is-payment-only.md)、
    [#37](https://github.com/Ries630/ZaimViewer/issues/37)）。
@@ -386,27 +305,16 @@ Cloudflare の認証情報（`Account > D1 > Edit` のトークン）が必要
 
 ## 運用メモ
 
-- Grafana（Mac mini の :3080）からミラーを読む構想があったが、D1 へ移したため
-  そのままでは繋がらない。集計・推移が必要になったら、Worker 側に集計エンドポイントを
-  足すか、Grafana の JSON データソースを使う
 - 同期の定期実行は launchd（毎日 06:00）。登録・ログ・解除は [`ops/README.md`](ops/README.md)
 - コミットは Conventional Commits、本文は日本語
-- 旧 Python 実装は完全に削除済み。`src/zaimviewer/`、`tests/`、`.venv`、
-  `data/zaim.db`、`__pycache__` のいずれも手元に残っていない
 
 ## Codexレビュー指摘への応答
 
-- Codex のレビューコメントへの返信で `@codex` がメンションされた場合、明示的な修正依頼が
-  なければ、コードを変更せずレビュー指摘への対応状況を再判定する
-- コードが修正されている場合は、現在の PR head を確認し、指摘した問題が解消されたかを
-  判定する
-- 説明だけが返信されている場合は、コード・Issue・リポジトリの規範と照合し、その説明が
-  妥当かを判定する
-- 結論は `解消` / `未解消` / `説明妥当` / `説明不十分` のいずれかで、日本語で根拠を添える
-- 判定結果と根拠は同じレビュースレッドへ返信せず、Codex GitHub 連携が表示するタスクの
-  最終報告に記載する
-- `解消` または `説明妥当` と判定した場合だけ Resolve し、`未解消` または `説明不十分` の
-  場合は Resolve しない
+Codex のレビューへの返信で `@codex` がメンションされた場合、明示的な修正依頼がなければコードを変更せず再判定する。
+
+- 現在の PR head、指摘、返信、Issue、リポジトリ規範を照合し、修正の解消状況または説明の妥当性を確認する。
+- 結論は `解消` / `未解消` / `説明妥当` / `説明不十分`。日本語の根拠とともに Codex GitHub 連携のタスク最終報告へ記載し、同じレビュースレッドには返信しない。
+- `解消` / `説明妥当` の場合だけ Resolve する。
 
 ## Code Review Rules
 
