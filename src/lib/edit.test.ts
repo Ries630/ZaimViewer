@@ -146,4 +146,22 @@ describe("編集中の計画 ID", () => {
     storeActivePlanId(fakeStorage, null);
     expect(readActivePlanId(fakeStorage)).toBeNull();
   });
+
+  it("sessionStorage の各操作が例外でも計画追跡の呼び出しを壊さない", () => {
+    const throwingStorage = {
+      getItem: () => {
+        throw new Error("SecurityError");
+      },
+      setItem: () => {
+        throw new Error("QuotaExceededError");
+      },
+      removeItem: () => {
+        throw new Error("SecurityError");
+      },
+    } as Storage;
+
+    expect(() => storeActivePlanId(throwingStorage, "plan-id")).not.toThrow();
+    expect(() => storeActivePlanId(throwingStorage, null)).not.toThrow();
+    expect(readActivePlanId(throwingStorage)).toBeNull();
+  });
 });

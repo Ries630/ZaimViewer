@@ -51,7 +51,12 @@ export function announceEditPlan(id: string | null, plan?: EditPlan, executing =
 
 /** sessionStorage が使える環境なら返す。 */
 function activeStorage(): Storage | null {
-  return window.sessionStorage;
+  try {
+    return window.sessionStorage;
+  } catch {
+    // Safari のプライベートモードなど、参照そのものが例外になる環境がある。
+    return null;
+  }
 }
 
 /**

@@ -305,8 +305,12 @@ export const ACTIVE_EDIT_PLAN_STORAGE_KEY = "zaimviewer.active-edit-plan-id";
  * @param id 計画 ID。null なら保存値を消す。
  */
 export function storeActivePlanId(storage: Storage, id: string | null): void {
-  if (id === null) storage.removeItem(ACTIVE_EDIT_PLAN_STORAGE_KEY);
-  else storage.setItem(ACTIVE_EDIT_PLAN_STORAGE_KEY, id);
+  try {
+    if (id === null) storage.removeItem(ACTIVE_EDIT_PLAN_STORAGE_KEY);
+    else storage.setItem(ACTIVE_EDIT_PLAN_STORAGE_KEY, id);
+  } catch {
+    // 保存できなくても、同一タブ内のイベントによる追跡は続ける。
+  }
 }
 
 /**
@@ -316,5 +320,10 @@ export function storeActivePlanId(storage: Storage, id: string | null): void {
  * @returns 計画 ID。未保存なら null。
  */
 export function readActivePlanId(storage: Storage): string | null {
-  return storage.getItem(ACTIVE_EDIT_PLAN_STORAGE_KEY);
+  try {
+    return storage.getItem(ACTIVE_EDIT_PLAN_STORAGE_KEY);
+  } catch {
+    // 保存値を復元できなければ、未保存として初期化する。
+    return null;
+  }
 }
