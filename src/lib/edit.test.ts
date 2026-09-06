@@ -148,7 +148,10 @@ describe("編集中の計画 ID", () => {
   });
 
   it("sessionStorage の各操作が例外でも計画追跡の呼び出しを壊さない", () => {
-    const throwingStorage = {
+    const throwingStorage: Storage = {
+      length: 0,
+      clear: () => {},
+      key: () => null,
       getItem: () => {
         throw new Error("SecurityError");
       },
@@ -158,7 +161,7 @@ describe("編集中の計画 ID", () => {
       removeItem: () => {
         throw new Error("SecurityError");
       },
-    } as Storage;
+    };
 
     expect(() => storeActivePlanId(throwingStorage, "plan-id")).not.toThrow();
     expect(() => storeActivePlanId(throwingStorage, null)).not.toThrow();
