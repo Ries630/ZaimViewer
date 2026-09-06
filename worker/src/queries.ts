@@ -144,6 +144,8 @@ export interface Transaction {
   place: string | null;
   comment: string | null;
   currency_code: string | null;
+  /** 支出の品名を編集できるか判定するレシート ID。 */
+  receipt_id: number | null;
 }
 
 /**
@@ -184,6 +186,7 @@ export async function fetchTransactions(
       place: t.place,
       comment: t.comment,
       currency_code: t.currencyCode,
+      receipt_id: t.receiptId,
     })
     .from(t)
     .leftJoin(categories, eq(categories.id, t.categoryId))
