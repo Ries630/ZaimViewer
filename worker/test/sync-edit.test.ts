@@ -2,13 +2,16 @@
 
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
+import * as v from "valibot";
 
 import {
   acquireMutation,
   getMutation,
   initializeOperations,
   insertEditPlan,
+  releaseMutation,
 } from "../src/edit-store";
+import { D1HttpDatabase } from "../src/d1-http";
 import { replaceMirrorMoney } from "../src/mirror-write";
 import { seedDatabase } from "./fixtures";
 import { syncAll } from "../src/sync";
@@ -25,6 +28,68 @@ const CREDENTIALS = {
 interface Deferred {
   promise: Promise<void>;
   resolve: () => void;
+}
+
+/** D1 HTTP API のバッチ要求。 */
+const HttpBatchRequest = v.object({
+  batch: v.array(
+    v.object({
+      sql: v.string(),
+      params: v.array(v.unknown()),
+    }),
+  ),
+});
+
+/** Valibot で検査した D1 HTTP API のバッチ要求型。 */
+type HttpBatchRequest = v.InferOutput<typeof HttpBatchRequest>;
+
+/** D1 HTTP リトライを再現する fetch と要求記録。 */
+interface D1HttpHarness {
+  fetch: typeof fetch;
+  requests: HttpBatchRequest[];
+  mutationGate503Count: () => number;
+}
+
+/** D1 HTTP API の要求本文を、テストで使える形に検査して取り出す。 */
+function parseHttpBatch(init: RequestInit | undefined): HttpBatchRequest {
+  if (typeof init?.body !== "string") throw new TypeError("D1 HTTP の要求本文が文字列ではない");
+  return v.parse(HttpBatchRequest, JSON.parse(init.body));
+}
+
+/** env.DB で D1 HTTP API のバッチ実行を再現する fetch。 */
+function makeD1HttpFetch(): D1HttpHarness {
+  const requests: HttpBatchRequest[] = [];
+  let mutationGate503Count = 0;
+
+  const fetch: typeof globalThis.fetch = async (_input, init) => {
+    const request = parseHttpBatch(init);
+    requests.push(request);
+    const results = await env.DB.batch(
+      request.batch.map(({ sql, params }) => env.DB.prepare(sql).bind(...params)),
+    );
+    const includesMutationInsert = request.batch.some(({ sql }) =>
+      /^INSERT INTO mutation_gate\b/i.test(sql),
+    );
+    if (includesMutationInsert && mutationGate503Count === 0) {
+      mutationGate503Count += 1;
+      return new Response("temporary D1 failure", { status: 503 });
+    }
+    return Response.json({
+      success: true,
+      errors: [],
+      messages: [],
+      result: results.map((result) => ({
+        results: result.results,
+        success: true,
+      })),
+    });
+  };
+
+  return {
+    fetch,
+    requests,
+    mutationGate503Count: () => mutationGate503Count,
+  };
 }
 
 /** 非同期処理をテスト中だけ一時停止・再開するための待機値を作る。 */
@@ -205,6 +270,32 @@ describe("syncAll と共有ゲート", () => {
     client.failVerify = true;
 
     await expect(syncAll(env.DB, client)).rejects.toThrow("意図した認証失敗");
+    await expect(getMutation(env.DB)).resolves.toBeNull();
+  });
+
+  it("ゲート取得の HTTP リトライ後も同期を完了し、後続処理へゲートを渡す", async () => {
+    const http = makeD1HttpFetch();
+    const db = new D1HttpDatabase({
+      accountId: "account",
+      databaseId: "database",
+      apiToken: "token",
+      fetch: http.fetch,
+    });
+    const client = new StubClient([{ id: 99, mode: "income", date: "2026-08-03", amount: 5000 }]);
+
+    await expect(syncAll(db, client)).resolves.toMatchObject({
+      counts: { transactions: 1, categories: 0, genres: 0, accounts: 0 },
+    });
+    expect(http.mutationGate503Count()).toBe(1);
+    expect(
+      http.requests.filter((request) =>
+        request.batch.some(({ sql }) => /^INSERT INTO mutation_gate\b/i.test(sql)),
+      ),
+    ).toHaveLength(2);
+    await expect(getMutation(env.DB)).resolves.toBeNull();
+
+    await expect(acquireMutation(env.DB, "following-owner", "edit")).resolves.toBe(true);
+    await releaseMutation(env.DB, "following-owner");
     await expect(getMutation(env.DB)).resolves.toBeNull();
   });
 

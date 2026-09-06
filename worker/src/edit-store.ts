@@ -31,9 +31,10 @@ export async function initializeOperations(db: Database): Promise<void> {
  *
  * 期限切れを理由に既存所有者を置き換えない。INSERT と競合判定を 1 文に
  * 閉じることで、Worker と D1 HTTP クライアントのどちらからも原子的に取得する。
+ * 同じ所有者・種別の再試行は開始時刻を変えず成功として復元する。
  *
  * @param db ミラー DB。
- * @param owner 処理を識別する所有者 ID。
+ * @param owner 処理ごとに新規発行し、その処理の再試行でのみ共有する所有者 ID。
  * @param kind 処理の種別。
  * @returns ゲートを取得できたか。
  */
@@ -47,7 +48,8 @@ export async function acquireMutation(
     .prepare(
       `INSERT INTO mutation_gate (slot, owner, kind, started_at)
        VALUES (1, ?, ?, ?)
-       ON CONFLICT(slot) DO NOTHING
+       ON CONFLICT(slot) DO UPDATE SET owner = excluded.owner
+       WHERE mutation_gate.owner = excluded.owner AND mutation_gate.kind = excluded.kind
        RETURNING slot`,
     )
     .bind(owner, kind, new Date().toISOString())

@@ -22,6 +22,20 @@ beforeEach(async () => {
 });
 
 describe("mutation_gate", () => {
+  it("同じ所有者と種別の再取得は成功し、最初の開始時刻を保つ", async () => {
+    await expect(acquireMutation(env.DB, "owner", "sync")).resolves.toBe(true);
+    await env.DB.prepare("UPDATE mutation_gate SET started_at = ? WHERE slot = 1")
+      .bind("2000-01-01T00:00:00.000Z")
+      .run();
+    const original = await getMutation(env.DB);
+
+    await expect(acquireMutation(env.DB, "owner", "sync")).resolves.toBe(true);
+    await expect(getMutation(env.DB)).resolves.toEqual(original);
+    await expect(acquireMutation(env.DB, "owner", "edit")).resolves.toBe(false);
+    await expect(acquireMutation(env.DB, "other-owner", "sync")).resolves.toBe(false);
+    await expect(getMutation(env.DB)).resolves.toEqual(original);
+  });
+
   it("同時に取得を試みても 1 件だけが所有者になる", async () => {
     const results = await Promise.all([
       acquireMutation(env.DB, "owner-a", "edit"),
