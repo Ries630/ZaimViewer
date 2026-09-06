@@ -57,6 +57,8 @@ ADR の作成基準・書式・作成・更新・置換・廃止の手順は `ad
 | [0033](0033-zod-mini-for-client-parsing.md) | クライアント側の入力検証に `zod/mini` を使う | 廃止（[0034](0034-valibot-for-validation.md) により置換） |
 | [0034](0034-valibot-for-validation.md) | 入力検証を valibot に一本化する | 承認済み |
 | [0035](0035-itemized-receipt-id-is-payment-only.md) | `receipt_id` による品目化を支出だけに限定する | 承認済み |
+| [0036](0036-refresh-edited-mirror-with-shared-gate.md) | 編集後の再取得結果をミラーへ反映し、同期と共通の排他を使う | 承認済み |
+| [0037](0037-foreground-edit-plans.md) | 一括編集は対象を固定し、画面から一件ずつ実行する | 承認済み |
 
 ### 未決・進行中
 
