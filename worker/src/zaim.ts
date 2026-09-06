@@ -76,7 +76,7 @@ export class ZaimClient {
    * @param credentials Zaim API の OAuth1.0a 認証情報。
    * @param request HTTP リクエスト関数。テストでは外部通信を差し替える。
    */
-  constructor(credentials: OAuth1Credentials, request: typeof fetch = fetch) {
+  constructor(credentials: OAuth1Credentials, request: typeof fetch = fetch.bind(globalThis)) {
     this.#credentials = credentials;
     this.#fetch = request;
   }
