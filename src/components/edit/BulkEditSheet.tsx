@@ -44,18 +44,6 @@ interface BulkEditSheetProps {
 
 type Step = "form" | "review" | "result";
 
-const LABELS = {
-  date: "日付",
-  amount: "金額",
-  category_id: "カテゴリ",
-  genre_id: "ジャンル",
-  from_account_id: "出金元",
-  to_account_id: "入金先",
-  name: "品名",
-  place: "店舗",
-  comment: "メモ",
-} satisfies Record<EditField, string>;
-
 const EMPTY_DRAFT: EditDraft = {
   date: "",
   amount: "",
@@ -82,20 +70,6 @@ function itemStatus(plan: EditPlan): string {
     .filter(([key]) => key !== undefined && counts.has(key))
     .map(([key, label]) => `${label ?? ""} ${counts.get(key ?? "") ?? 0}`)
     .join("・");
-}
-
-function valueText(field: EditField, value: EditDraft, masters: Masters | undefined): string {
-  if (field === "name" || field === "place" || field === "comment") return value[field];
-  if (field === "category_id") {
-    return masters?.categories.find((item) => item.id === value.category_id)?.name ?? "（未設定）";
-  }
-  if (field === "genre_id") {
-    return masters?.genres.find((item) => item.id === value.genre_id)?.name ?? "（未設定）";
-  }
-  if (field === "from_account_id" || field === "to_account_id") {
-    return masters?.accounts.find((item) => item.id === value[field])?.name ?? "（未設定）";
-  }
-  return "（一括変更不可）";
 }
 
 /** サーバーが固定した対象を確認画面へ表示する。 */
@@ -254,8 +228,6 @@ export function BulkEditSheet({
   const canOpen = allHaveJpy && fields.length > 0 && total > 0 && total <= MAX_EDIT_ITEMS;
   const targetCount = total ?? items.length;
   const reviewCount = plan?.items.length ?? targetCount;
-  // SAFETY: changes は editChangesSchema で検証済みなので、キーは EditChanges の項目に限られる。
-  const changedFields = changes ? (Object.keys(changes) as EditField[]) : [];
 
   return (
     <dialog
@@ -346,16 +318,6 @@ export function BulkEditSheet({
                   ))}
                 </ul>
               </div>
-              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
-                {changedFields.map((field) => (
-                  <div key={field} className="contents">
-                    <dt className="text-base-content/60">{LABELS[field]}</dt>
-                    <dd className="break-words font-medium">
-                      {valueText(field, draft, masters) || "（空文字にする）"}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
               {error && <p className="text-sm text-error">{error}</p>}
               <div className="flex gap-2">
                 <button
