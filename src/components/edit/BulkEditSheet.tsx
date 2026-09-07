@@ -101,7 +101,7 @@ function valueText(field: EditField, value: EditDraft, masters: Masters | undefi
 /** サーバーが固定した対象を確認画面へ表示する。 */
 function beforeLabel(plan: EditPlan["items"][number]): string {
   const before = plan.before;
-  return `#${before.id} ${before.date}・${formatAmount(before.amount, before.currency_code)}`;
+  return `${before.date}・${formatAmount(before.amount, before.currency_code)}`;
 }
 
 /** 対象を識別するため、サーバー固定時点の店舗と品名を表示する。 */
