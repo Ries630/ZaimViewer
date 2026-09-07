@@ -192,7 +192,6 @@ export function App() {
           total={totals?.total}
           masters={mastersData}
           capabilities={editCapabilities.data}
-          onCancel={() => bulk.current?.close()}
         />
       )}
 

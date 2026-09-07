@@ -12,6 +12,7 @@ import { commentSegments, detailFields } from "../lib/transaction";
 import { Amount } from "./Amount";
 import { SingleEditForm } from "./edit/SingleEditForm";
 import { ModeBadge } from "./ModeBadge";
+import { SheetCloseButton } from "./SheetCloseButton";
 
 interface CommentTextProps {
   /** 表示するメモ。 */
@@ -103,42 +104,52 @@ export function TransactionSheet({
       aria-label="明細"
       onClose={() => setEditing(false)}
     >
-      <div className="modal-box flex max-h-[85vh] flex-col gap-3 p-0">
+      <div className="modal-box flex max-h-[85dvh] min-h-0 flex-col overflow-hidden p-0">
         {transaction && !editing && (
           <>
-            <div className="border-b border-base-300 px-5 pt-5 pb-3">
-              <div className="flex items-baseline gap-2">
-                <h2 className="text-base font-bold">{formatDateHeading(transaction.date)}</h2>
-                {isFutureDate(transaction.date, today) && (
-                  <span className="badge badge-info badge-sm">予定</span>
-                )}
+            <div className="flex shrink-0 items-start justify-between border-b border-base-300 px-5 pt-5 pb-3">
+              <div>
+                <div className="flex items-baseline gap-2">
+                  <h2 className="text-base font-bold">{formatDateHeading(transaction.date)}</h2>
+                  {isFutureDate(transaction.date, today) && (
+                    <span className="badge badge-info badge-sm">予定</span>
+                  )}
+                </div>
+                {/* 種別は金額を修飾するものなので隣に置く。ラベルと値の対に
+                    するより、値が 3 つに限られるぶんバッジの方が速く読める */}
+                <p className="mt-1 flex items-center gap-2">
+                  <Amount transaction={transaction} className="text-2xl" />
+                  <ModeBadge mode={transaction.mode} />
+                </p>
               </div>
-              {/* 種別は金額を修飾するものなので隣に置く。ラベルと値の対に
-                  するより、値が 3 つに限られるぶんバッジの方が速く読める */}
-              <p className="mt-1 flex items-center gap-2">
-                <Amount transaction={transaction} className="text-2xl" />
-                <ModeBadge mode={transaction.mode} />
-              </p>
+              <SheetCloseButton />
             </div>
 
             {/* ラベル幅は最長のラベルに揃え、残りをすべて値に渡す。
                 値だけが折り返せればよく、ラベルは折り返させない */}
-            <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-2 overflow-y-auto px-5">
-              {detailFields(transaction).map((field) => (
-                <Fragment key={field.key}>
-                  <dt className="text-sm whitespace-nowrap text-base-content/60">{field.label}</dt>
-                  <dd className="break-words">
-                    {field.key === "comment" ? <CommentText comment={field.value} /> : field.value}
-                  </dd>
-                </Fragment>
-              ))}
-            </dl>
+            <div className="min-h-0 flex-1 overscroll-contain overflow-y-auto px-5 py-4">
+              <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-2">
+                {detailFields(transaction).map((field) => (
+                  <Fragment key={field.key}>
+                    <dt className="text-sm whitespace-nowrap text-base-content/60">
+                      {field.label}
+                    </dt>
+                    <dd className="break-words">
+                      {field.key === "comment" ? (
+                        <CommentText comment={field.value} />
+                      ) : (
+                        field.value
+                      )}
+                    </dd>
+                  </Fragment>
+                ))}
+              </dl>
+            </div>
           </>
         )}
 
         {transaction && editing && editCapabilities && (
-          <div className="overflow-y-auto px-5 pt-5">
-            <h2 className="mb-3 text-base font-bold">明細を編集</h2>
+          <div className="flex min-h-0 flex-1 flex-col">
             <SingleEditForm
               key={transaction.id}
               transaction={transaction}
@@ -149,18 +160,17 @@ export function TransactionSheet({
           </div>
         )}
 
-        <form method="dialog" className="border-t border-base-300 px-5 pt-3 pb-safe-bottom">
-          {!editing && canEdit && (
+        {transaction && !editing && canEdit && (
+          <div className="shrink-0 border-t border-base-300 px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
             <button
               type="button"
-              className="btn btn-primary btn-block mb-2"
+              className="btn btn-primary btn-block"
               onClick={() => setEditing(true)}
             >
               編集
             </button>
-          )}
-          <button className="btn btn-block mb-5">閉じる</button>
-        </form>
+          </div>
+        )}
       </div>
 
       <form method="dialog" className="modal-backdrop">

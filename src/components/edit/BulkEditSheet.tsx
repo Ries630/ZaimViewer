@@ -17,6 +17,7 @@ import {
   type EditField,
   type EditPlan,
 } from "../../lib/edit";
+import { SheetCloseButton } from "../SheetCloseButton";
 import { EditFields } from "./EditFields";
 import { EditReview } from "./EditReview";
 import { isRunnerBusy } from "../../lib/edit-plan-runner";
@@ -38,8 +39,6 @@ interface BulkEditSheetProps {
   masters: Masters | undefined;
   /** API が確認した編集能力。 */
   capabilities: EditCapabilities | undefined;
-  /** シートを閉じる。 */
-  onCancel: () => void;
 }
 
 type Step = "form" | "review" | "result";
@@ -99,7 +98,6 @@ export function BulkEditSheet({
   total,
   masters,
   capabilities,
-  onCancel,
 }: BulkEditSheetProps) {
   const { runner, snapshot } = useEditRunner();
   const [draft, setDraft] = useState<EditDraft>(EMPTY_DRAFT);
@@ -240,15 +238,29 @@ export function BulkEditSheet({
       aria-label="一括編集"
       onClose={handleDialogClose}
     >
-      <div className="modal-box flex max-h-[85vh] flex-col gap-3 p-0">
-        <div className="shrink-0 border-b border-base-300 px-5 pt-5 pb-3">
-          <h2 className="text-base font-bold">一括編集</h2>
-          <p className="mt-1 text-sm text-base-content/70">
-            {targetCount} 件（{mode === "payment" ? "支出" : mode === "income" ? "収入" : "振替"}）
-          </p>
+      <div className="modal-box flex max-h-[85dvh] flex-col gap-3 overflow-hidden p-0">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-base-300 px-5 pt-3 pb-3">
+          <div>
+            <h2 className="text-base font-bold">
+              {step === "review"
+                ? "一括編集の確認"
+                : step === "result"
+                  ? "一括編集の結果"
+                  : "一括編集"}
+            </h2>
+            <p className="mt-1 text-sm text-base-content/70">
+              {step === "review"
+                ? "変更対象 " + reviewCount + " 件"
+                : targetCount +
+                  " 件（" +
+                  (mode === "payment" ? "支出" : mode === "income" ? "収入" : "振替") +
+                  "）"}
+            </p>
+          </div>
+          <SheetCloseButton />
         </div>
 
-        <div ref={contentRef} className="min-h-0 overflow-y-auto px-5">
+        <div ref={contentRef} className="min-h-0 overflow-y-auto overscroll-contain px-5 pb-3">
           {total !== undefined && items.length === total && !allHaveJpy && (
             <p className="py-4 text-sm text-warning">
               円以外、または通貨を確認できない明細は編集できません。
@@ -287,34 +299,68 @@ export function BulkEditSheet({
 
           {step === "review" && changes && plan && (
             <div className="flex flex-col gap-3">
-              <div role="alert" className="alert alert-warning">
-                <span>{reviewCount} 件に次の変更を適用します。</span>
-              </div>
-              <div className="rounded-box border border-base-300 p-3">
-                <p className="text-sm font-medium">変更する明細と変更内容</p>
-                <p className="mt-1 text-sm text-base-content/70">
-                  対象ごとに変更前後を確認してから保存してください。
-                </p>
-                <ul className="mt-2 flex max-h-[50vh] flex-col gap-3 overflow-y-auto">
-                  {plan.items.map((item) => (
-                    <li key={item.before.id} className="rounded-box border border-base-300 p-3">
-                      <p className="text-sm font-medium">
-                        {beforeLabel(item)}・{identityLabel(item)}
-                      </p>
-                      <div className="mt-2">
-                        <EditReview
-                          before={item.before}
-                          after={previewSnapshot(item.before, changes)}
-                          changes={changes}
-                          masters={masters}
-                          showNotice={false}
-                        />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              <ul className="flex flex-col gap-3">
+                {plan.items.map((item) => (
+                  <li key={item.before.id} className="rounded-box border border-base-300 p-3">
+                    <p className="text-sm font-medium">
+                      {beforeLabel(item)}・{identityLabel(item)}
+                    </p>
+                    <div className="mt-2">
+                      <EditReview
+                        before={item.before}
+                        after={previewSnapshot(item.before, changes)}
+                        changes={changes}
+                        masters={masters}
+                        showNotice={false}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
               {error && <p className="text-sm text-error">{error}</p>}
+            </div>
+          )}
+
+          {step === "result" && (
+            <div className="flex flex-col gap-3">
+              {runnerPlan ? (
+                <>
+                  <div role="status" className="alert alert-info">
+                    <span>{itemStatus(runnerPlan)}</span>
+                  </div>
+                  {stopped && (
+                    <p className="text-sm text-warning">
+                      新しい送信を停止しました。送信中または結果不明の項目は先に照合してください。
+                    </p>
+                  )}
+                  {snapshot.error && <p className="text-sm text-error">{snapshot.error}</p>}
+                  {error && <p className="text-sm text-error">{error}</p>}
+                </>
+              ) : (
+                <p className="text-sm text-base-content/70">保存を開始しています…</p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {(step === "review" ||
+          (step === "form" && canOpen) ||
+          (step === "result" &&
+            runnerPlan?.items.some(
+              (item) => item.status !== "succeeded" && item.status !== "failed",
+            ))) && (
+          <div className="shrink-0 border-t border-base-300 px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+            {step === "form" && canOpen && (
+              <button
+                type="button"
+                className="btn btn-primary btn-block mb-2"
+                onClick={() => void handleReview()}
+                disabled={busy || runnerBusy || hasUnfinishedRunnerPlan}
+              >
+                {busy ? "対象を確認中…" : "変更を確認"}
+              </button>
+            )}
+            {step === "review" && changes && plan && (
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -337,80 +383,45 @@ export function BulkEditSheet({
                   {busy ? "保存中…" : "この内容で保存"}
                 </button>
               </div>
-            </div>
-          )}
-
-          {step === "result" && (
-            <div className="flex flex-col gap-3">
-              {runnerPlan ? (
-                <>
-                  <div role="status" className="alert alert-info">
-                    <span>{itemStatus(runnerPlan)}</span>
-                  </div>
-                  {stopped && (
-                    <p className="text-sm text-warning">
-                      新しい送信を停止しました。送信中または結果不明の項目は先に照合してください。
-                    </p>
-                  )}
-                  {snapshot.error && <p className="text-sm text-error">{snapshot.error}</p>}
-                  {error && <p className="text-sm text-error">{error}</p>}
-                  {runnerPlan.items.some(
-                    (item) =>
-                      item.status === "sending" ||
-                      item.status === "unknown" ||
-                      item.status === "mirror_pending",
-                  ) && (
+            )}
+            {step === "result" && runnerPlan && (
+              <div className="flex flex-col gap-2">
+                {runnerPlan.items.some(
+                  (item) =>
+                    item.status === "sending" ||
+                    item.status === "unknown" ||
+                    item.status === "mirror_pending",
+                ) && (
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={handleReconcile}
+                    disabled={busy || runnerBusy}
+                  >
+                    {busy || snapshot.phase === "reconciling" ? "照合中…" : "結果を照合"}
+                  </button>
+                )}
+                {runnerPlan.items.some((item) => item.status === "pending") && !stopped && (
+                  <button type="button" className="btn" onClick={handleStop} disabled={busy}>
+                    送信を停止
+                  </button>
+                )}
+                {runnerPlan.items.some((item) => item.status === "pending") &&
+                  stopped &&
+                  !activity.blocked && (
                     <button
                       type="button"
-                      className="btn"
-                      onClick={handleReconcile}
+                      className="btn btn-primary"
+                      onClick={handleResume}
                       disabled={busy || runnerBusy}
                     >
-                      {busy || snapshot.phase === "reconciling" ? "照合中…" : "結果を照合"}
+                      残りを再開
                     </button>
                   )}
-                  {runnerPlan.items.some((item) => item.status === "pending") && !stopped && (
-                    <button type="button" className="btn" onClick={handleStop} disabled={busy}>
-                      送信を停止
-                    </button>
-                  )}
-                  {runnerPlan.items.some((item) => item.status === "pending") &&
-                    stopped &&
-                    !activity.blocked && (
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        onClick={handleResume}
-                        disabled={busy || runnerBusy}
-                      >
-                        残りを再開
-                      </button>
-                    )}
-                </>
-              ) : (
-                <p className="text-sm text-base-content/70">保存を開始しています…</p>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="shrink-0 border-t border-base-300 px-5 pt-3 pb-safe-bottom">
-          {step === "form" && canOpen && (
-            <button
-              type="button"
-              className="btn btn-primary btn-block mb-2"
-              onClick={() => void handleReview()}
-              disabled={busy || runnerBusy || hasUnfinishedRunnerPlan}
-            >
-              {busy ? "対象を確認中…" : "変更を確認"}
-            </button>
-          )}
-          <form method="dialog">
-            <button className="btn btn-block mb-5" onClick={onCancel}>
-              閉じる
-            </button>
-          </form>
-        </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
       <form method="dialog" className="modal-backdrop">
         <button>閉じる</button>

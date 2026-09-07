@@ -1,6 +1,6 @@
 /** 明細 1 件の編集フォーム。 */
 
-import { useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { Masters } from "../../api/masters";
 import type { Transaction } from "../../api/transactions";
@@ -19,6 +19,7 @@ import { EditFields } from "./EditFields";
 import { EditReview } from "./EditReview";
 import { useEditRunner } from "./EditPlanProvider";
 import { useEditActivity } from "./useEditActivity";
+import { SheetCloseButton } from "../SheetCloseButton";
 
 interface SingleEditFormProps {
   /** 編集対象。詳細シートで選択された値。 */
@@ -62,6 +63,11 @@ export function SingleEditForm({
   const [before] = useState(() => snapshotOf(transaction));
   const [draft, setDraft] = useState(() => draftOf(before));
   const [step, setStep] = useState<Step>("form");
+  const contentRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // 画面を切り替えたときは、確認内容を先頭から表示する。
+    if (contentRef.current) contentRef.current.scrollTop = 0;
+  }, [step]);
   const [changes, setChanges] = useState<EditChanges | null>(null);
   const [error, setError] = useState<string | null>(null);
   const activity = useEditActivity();
@@ -149,8 +155,11 @@ export function SingleEditForm({
     void runner.resume();
   };
 
+  let body: ReactNode;
+  let footer: ReactNode;
+
   if (!canEdit && step === "form") {
-    return (
+    body = (
       <div className="flex flex-col gap-3">
         <p className="text-sm text-base-content/70">
           この明細は、現在の編集能力では変更できません。
@@ -158,14 +167,14 @@ export function SingleEditForm({
         {before.currency_code !== "JPY" && (
           <p className="text-sm text-warning">円以外、または通貨を確認できない明細です。</p>
         )}
-        <button type="button" className="btn" onClick={onCancel}>
-          戻る
-        </button>
       </div>
     );
-  }
-
-  if (step === "result") {
+    footer = (
+      <button type="button" className="btn btn-block" onClick={onCancel}>
+        詳細に戻る
+      </button>
+    );
+  } else if (step === "result") {
     const item = plan?.items.find((candidate) => candidate.before.id === before.id);
     const canReconcile =
       plan !== null &&
@@ -173,7 +182,7 @@ export function SingleEditForm({
         item?.status === "unknown" ||
         item?.status === "mirror_pending");
     const canResume = plan !== null && item?.status === "pending" && !activity.blocked;
-    return (
+    body = (
       <div className="flex flex-col gap-3">
         {plan ? (
           <div
@@ -190,76 +199,98 @@ export function SingleEditForm({
             {runnerBusy ? "保存を開始しています…" : "保存を開始できませんでした"}
           </p>
         )}
-        {!plan && !runnerBusy && (
-          <button type="button" className="btn" onClick={() => setStep("form")}>
-            戻って修正
-          </button>
-        )}
         {item?.message && item.status !== "succeeded" && (
           <p className="text-sm text-error">{item.message}</p>
         )}
+        {snapshot.error && <p className="text-sm text-error">{snapshot.error}</p>}
+        {error && <p className="text-sm text-error">{error}</p>}
+      </div>
+    );
+    footer = (
+      <div className="flex flex-col gap-2">
+        {!plan && !runnerBusy && (
+          <button type="button" className="btn btn-block" onClick={() => setStep("form")}>
+            戻って修正
+          </button>
+        )}
         {canReconcile && (
-          <button type="button" className="btn" onClick={handleReconcile} disabled={runnerBusy}>
+          <button
+            type="button"
+            className="btn btn-block"
+            onClick={handleReconcile}
+            disabled={runnerBusy}
+          >
             {runnerBusy ? "照合中…" : "結果を照合"}
           </button>
         )}
         {canResume && (
-          <button type="button" className="btn" onClick={handleResume} disabled={runnerBusy}>
+          <button
+            type="button"
+            className="btn btn-block"
+            onClick={handleResume}
+            disabled={runnerBusy}
+          >
             {runnerBusy ? "保存中…" : "保存を再開"}
           </button>
         )}
-        {snapshot.error && <p className="text-sm text-error">{snapshot.error}</p>}
-        {error && <p className="text-sm text-error">{error}</p>}
-        <button type="button" className="btn" onClick={onCancel}>
-          閉じる
+        <button type="button" className="btn btn-block" onClick={onCancel}>
+          詳細に戻る
         </button>
       </div>
     );
-  }
-
-  if (step === "review" && changes) {
+  } else if (step === "review" && changes) {
     const after = previewSnapshot(before, changes);
-    return (
+    body = (
       <div className="flex flex-col gap-3">
-        <EditReview before={before} after={after} changes={changes} masters={masters} />
+        <EditReview
+          before={before}
+          after={after}
+          changes={changes}
+          masters={masters}
+          showNotice={false}
+        />
         {error && <p className="text-sm text-error">{error}</p>}
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className="btn flex-1"
-            onClick={() => setStep("form")}
-            disabled={runnerBusy}
-          >
-            戻って修正
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary flex-1"
-            onClick={handleSave}
-            disabled={runnerBusy || hasUnfinishedRunnerPlan}
-          >
-            {runnerBusy ? "保存中…" : "この内容で保存"}
-          </button>
-        </div>
       </div>
     );
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      {hasUnfinishedRunnerPlan && (
-        <p className="text-sm text-warning">
-          未完了の編集計画があります。先に一覧の編集計画を解決してください。
-        </p>
-      )}
-      <EditFields
-        mode={before.mode}
-        masters={masters}
-        draft={draft}
-        onChange={setDraft}
-        fields={fields}
-      />
-      {error && <p className="text-sm text-error">{error}</p>}
+    footer = (
+      <div className="flex gap-2">
+        <button
+          type="button"
+          className="btn flex-1"
+          onClick={() => setStep("form")}
+          disabled={runnerBusy}
+        >
+          戻って修正
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary flex-1"
+          onClick={handleSave}
+          disabled={runnerBusy || hasUnfinishedRunnerPlan}
+        >
+          {runnerBusy ? "保存中…" : "この内容で保存"}
+        </button>
+      </div>
+    );
+  } else {
+    body = (
+      <div className="flex flex-col gap-3">
+        {hasUnfinishedRunnerPlan && (
+          <p className="text-sm text-warning">
+            未完了の編集計画があります。先に一覧の編集計画を解決してください。
+          </p>
+        )}
+        <EditFields
+          mode={before.mode}
+          masters={masters}
+          draft={draft}
+          onChange={setDraft}
+          fields={fields}
+        />
+        {error && <p className="text-sm text-error">{error}</p>}
+      </div>
+    );
+    footer = (
       <div className="flex gap-2">
         <button type="button" className="btn flex-1" onClick={onCancel}>
           キャンセル
@@ -272,6 +303,22 @@ export function SingleEditForm({
         >
           変更を確認
         </button>
+      </div>
+    );
+  }
+
+  const heading =
+    step === "form" ? "明細を編集" : step === "review" ? "明細編集の確認" : "明細編集の結果";
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 items-center justify-between border-b border-base-300 px-5 py-2">
+        <h2 className="text-base font-bold">{heading}</h2>
+        <SheetCloseButton />
+      </div>
+      <div className="min-h-0 flex-1 overscroll-contain overflow-y-auto px-5 py-4">{body}</div>
+      <div className="shrink-0 border-t border-base-300 px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+        {footer}
       </div>
     </div>
   );
