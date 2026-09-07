@@ -151,6 +151,55 @@ describe("createEditPlan", () => {
 });
 
 describe("executeEditItem", () => {
+  it("店舗変更に伴う place_uid の更新を許可してミラーへ反映する", async () => {
+    const plan = await createEditPlan(
+      env.DB,
+      [paymentSnapshot()],
+      { place: "更新店舗" },
+      "single",
+      CAPABILITIES,
+    );
+    const before = { ...money(), place_uid: "before" };
+    const after = { ...money(), place: "更新店舗", place_uid: "after" };
+    const client = new StubClient(before, after);
+
+    const result = await executeEditItem(env.DB, client, plan.id, 1, CAPABILITIES);
+
+    expect(result.items[0]).toMatchObject({
+      status: "succeeded",
+      after: { place: "更新店舗", amount: 320 },
+    });
+    await expect(
+      env.DB.prepare("SELECT place, raw FROM transactions WHERE id = 1").first(),
+    ).resolves.toMatchObject({ place: "更新店舗", raw: JSON.stringify(after) });
+  });
+
+  it("結果不明の店舗変更を place_uid の更新ごと再送せず照合する", async () => {
+    const plan = await createEditPlan(
+      env.DB,
+      [paymentSnapshot()],
+      { place: "更新店舗" },
+      "single",
+      CAPABILITIES,
+    );
+    const before = { ...money(), place_uid: "before" };
+    const sender = new StubClient(before);
+    sender.updateError = new Error("fixture failure");
+    expect((await executeEditItem(env.DB, sender, plan.id, 1, CAPABILITIES)).items[0]?.status).toBe(
+      "unknown",
+    );
+
+    const after = { ...money(), place: "更新店舗", place_uid: "after" };
+    const reader = new StubClient(after);
+    const result = await reconcileEditItem(env.DB, reader, plan.id, 1);
+
+    expect(result.items[0]).toMatchObject({ status: "succeeded", after: { place: "更新店舗" } });
+    expect(reader.updates).toHaveLength(0);
+    await expect(
+      env.DB.prepare("SELECT place FROM transactions WHERE id = 1").first(),
+    ).resolves.toMatchObject({ place: "更新店舗" });
+  });
+
   it("未変更の非表示列が更新後に変われば結果不明でミラーを保つ", async () => {
     const plan = await createEditPlan(
       env.DB,

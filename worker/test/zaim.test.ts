@@ -12,6 +12,28 @@ const CREDENTIALS = {
   accessTokenSecret: "access-token-secret",
 };
 
+describe("ZaimClient の既定の fetch", () => {
+  it("Workers の fetch が要求する呼び出し元を保って読み取りと更新を行う", async () => {
+    const request = vi.spyOn(globalThis, "fetch").mockImplementation(function (this: unknown) {
+      if (this !== globalThis) throw new TypeError("Illegal invocation");
+      return Promise.resolve(Response.json({ money: [{ id: 123, mode: "payment" }] }));
+    });
+    try {
+      const client = new ZaimClient(CREDENTIALS);
+      await expect(client.moneyById("payment", 123, "2026-08-28")).resolves.toMatchObject({
+        id: 123,
+        mode: "payment",
+      });
+      await expect(
+        client.updateMoney("payment", 123, { amount: 4733, comment: "メモ" }),
+      ).resolves.toBeUndefined();
+      await expect(client.updateReceiptId("payment", 123, 4733, 456)).resolves.toBeUndefined();
+    } finally {
+      request.mockRestore();
+    }
+  });
+});
+
 /** 成功レスポンスを返す fetch の代替を作る。 */
 function createFetchMock(): typeof fetch {
   return vi.fn<typeof fetch>(async () => Response.json({ money: { id: 123 } }));

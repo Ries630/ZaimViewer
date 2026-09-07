@@ -2,6 +2,8 @@
  * 絞り込みのシート。
  */
 
+import { SheetCloseButton } from "./SheetCloseButton";
+
 import type { RefObject } from "react";
 
 import type { Masters } from "../api/masters";
@@ -73,15 +75,18 @@ export function FilterSheet({
 
   return (
     <dialog ref={ref} className="modal modal-bottom sm:modal-middle" aria-label="絞り込み">
-      <div className="modal-box flex max-h-[85vh] flex-col gap-3 p-0">
-        <div className="flex items-baseline justify-between border-b border-base-300 px-5 pt-5 pb-3">
+      <div className="modal-box flex max-h-[85dvh] flex-col gap-3 overflow-hidden p-0">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-base-300 px-5 pt-5 pb-3">
           <h2 className="text-base font-bold">絞り込み</h2>
-          <button type="button" className="btn btn-ghost btn-xs" onClick={onReset}>
-            既定に戻す
-          </button>
+          <div className="flex items-center gap-2">
+            <button type="button" className="btn btn-ghost" onClick={onReset}>
+              既定に戻す
+            </button>
+            <SheetCloseButton />
+          </div>
         </div>
 
-        <div className="flex flex-col gap-2 overflow-y-auto px-5">
+        <div className="flex min-h-0 flex-col gap-2 overflow-y-auto overscroll-contain px-5">
           <PeriodField filter={filter} today={today} onChange={onChange} />
           <ModeField filter={filter} onChange={onChange} />
 
@@ -123,8 +128,11 @@ export function FilterSheet({
           />
         </div>
 
-        <form method="dialog" className="border-t border-base-300 px-5 pt-3 pb-safe-bottom">
-          <button className="btn btn-block btn-primary mb-5">
+        <form
+          method="dialog"
+          className="shrink-0 border-t border-base-300 px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+        >
+          <button className="btn btn-block btn-primary">
             {total === undefined ? "閉じる" : `${formatCount(total)} 件を表示`}
           </button>
         </form>

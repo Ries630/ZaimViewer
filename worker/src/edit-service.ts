@@ -125,6 +125,8 @@ function removeMutableKeys(value: Record<string, unknown>, changes: EditChanges)
   const copy = { ...value };
   for (const key of Object.keys(changes)) delete copy[key];
   for (const key of RAW_MUTABLE_KEYS) delete copy[key];
+  // 店舗を変更すると、Zaim が内部の店舗 ID も連動して更新する。
+  if ("place" in changes) delete copy.place_uid;
   return canonicalJson(copy);
 }
 
@@ -427,11 +429,18 @@ export async function createEditPlan(
       throw new EditError("invalid_snapshot", "編集対象の値が不正です", 400);
     }
   });
+  const effectiveItems: EditSnapshot[] = [];
   for (const item of validatedItems) {
     validateEditFields(item, validatedChanges, capabilities, source === "filter");
     if (!hasEffectiveChange(item, validatedChanges)) {
+      // 一括編集では変更不要の明細を計画から外し、残りだけを確認・実行する。
+      if (source === "filter") continue;
       throw new EditError("no_op", "変更内容が現在の値と同じです", 400);
     }
+    effectiveItems.push(item);
+  }
+  if (effectiveItems.length === 0) {
+    throw new EditError("no_op", "対象の明細はすべて指定値と同じです", 400);
   }
 
   return await withMutation(db, "plan", async () => {
@@ -444,11 +453,11 @@ export async function createEditPlan(
     }
     const rows = await readMirrorRows(
       db,
-      validatedItems.map((item) => item.id),
+      effectiveItems.map((item) => item.id),
     );
     const seen = new Set<number>();
     const storedItems: StoredEditItem[] = [];
-    for (const item of validatedItems) {
+    for (const item of effectiveItems) {
       if (seen.has(item.id))
         throw new EditError("duplicate_item", "同じ明細を複数指定できません", 400);
       seen.add(item.id);
@@ -469,7 +478,7 @@ export async function createEditPlan(
         beforeRaw: row.raw ?? undefined,
       });
     }
-    await validateMasters(db, validatedItems, validatedChanges);
+    await validateMasters(db, effectiveItems, validatedChanges);
 
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();

@@ -2,13 +2,17 @@
  * 明細 1 件の詳細シート。
  */
 
-import { Fragment, type RefObject } from "react";
+import { Fragment, useEffect, useState, type RefObject } from "react";
 
+import type { Masters } from "../api/masters";
 import type { Transaction } from "../api/transactions";
 import { formatDateHeading, isFutureDate } from "../lib/format";
+import { editableFields, type EditCapabilities, type EditMode } from "../lib/edit";
 import { commentSegments, detailFields } from "../lib/transaction";
 import { Amount } from "./Amount";
+import { SingleEditForm } from "./edit/SingleEditForm";
 import { ModeBadge } from "./ModeBadge";
+import { SheetCloseButton } from "./SheetCloseButton";
 
 interface CommentTextProps {
   /** 表示するメモ。 */
@@ -49,6 +53,10 @@ interface TransactionSheetProps {
   transaction: Transaction | null;
   /** JST の今日（`YYYY-MM-DD`）。未来の明細に印を付けるのに使う。 */
   today: string;
+  /** 編集フォームで使うマスタ。 */
+  masters?: Masters;
+  /** Worker が確認した編集能力。 */
+  editCapabilities?: EditCapabilities;
 }
 
 /**
@@ -69,45 +77,100 @@ interface TransactionSheetProps {
  * @param props 明細と今日の日付。
  * @returns 詳細シート。
  */
-export function TransactionSheet({ ref, transaction, today }: TransactionSheetProps) {
+export function TransactionSheet({
+  ref,
+  transaction,
+  today,
+  masters,
+  editCapabilities,
+}: TransactionSheetProps) {
+  const [editing, setEditing] = useState(false);
+
+  // 別明細を選んだときは、前の明細の編集モードを持ち越さない。
+  useEffect(() => setEditing(false), [transaction?.id]);
+
+  const canEdit =
+    transaction !== null &&
+    transaction.currency_code === "JPY" &&
+    editCapabilities !== undefined &&
+    // SAFETY: Worker の読み取り API はこの 3 種別を返し、未知の種別は capability から除外される。
+    editableFields(transaction.mode as EditMode, editCapabilities, transaction.receipt_id).length >
+      0;
+
   return (
-    <dialog ref={ref} className="modal modal-bottom sm:modal-middle" aria-label="明細">
-      <div className="modal-box flex max-h-[85vh] flex-col gap-3 p-0">
-        {transaction && (
+    <dialog
+      ref={ref}
+      className="modal modal-bottom sm:modal-middle"
+      aria-label="明細"
+      onClose={() => setEditing(false)}
+    >
+      <div className="modal-box flex max-h-[85dvh] min-h-0 flex-col overflow-hidden p-0">
+        {transaction && !editing && (
           <>
-            <div className="border-b border-base-300 px-5 pt-5 pb-3">
-              <div className="flex items-baseline gap-2">
-                <h2 className="text-base font-bold">{formatDateHeading(transaction.date)}</h2>
-                {isFutureDate(transaction.date, today) && (
-                  <span className="badge badge-info badge-sm">予定</span>
-                )}
+            <div className="flex shrink-0 items-start justify-between border-b border-base-300 px-5 pt-5 pb-3">
+              <div>
+                <div className="flex items-baseline gap-2">
+                  <h2 className="text-base font-bold">{formatDateHeading(transaction.date)}</h2>
+                  {isFutureDate(transaction.date, today) && (
+                    <span className="badge badge-info badge-sm">予定</span>
+                  )}
+                </div>
+                {/* 種別は金額を修飾するものなので隣に置く。ラベルと値の対に
+                    するより、値が 3 つに限られるぶんバッジの方が速く読める */}
+                <p className="mt-1 flex items-center gap-2">
+                  <Amount transaction={transaction} className="text-2xl" />
+                  <ModeBadge mode={transaction.mode} />
+                </p>
               </div>
-              {/* 種別は金額を修飾するものなので隣に置く。ラベルと値の対に
-                  するより、値が 3 つに限られるぶんバッジの方が速く読める */}
-              <p className="mt-1 flex items-center gap-2">
-                <Amount transaction={transaction} className="text-2xl" />
-                <ModeBadge mode={transaction.mode} />
-              </p>
+              <SheetCloseButton />
             </div>
 
             {/* ラベル幅は最長のラベルに揃え、残りをすべて値に渡す。
                 値だけが折り返せればよく、ラベルは折り返させない */}
-            <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-2 overflow-y-auto px-5">
-              {detailFields(transaction).map((field) => (
-                <Fragment key={field.key}>
-                  <dt className="text-sm whitespace-nowrap text-base-content/60">{field.label}</dt>
-                  <dd className="break-words">
-                    {field.key === "comment" ? <CommentText comment={field.value} /> : field.value}
-                  </dd>
-                </Fragment>
-              ))}
-            </dl>
+            <div className="min-h-0 flex-1 overscroll-contain overflow-y-auto px-5 py-4">
+              <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-2">
+                {detailFields(transaction).map((field) => (
+                  <Fragment key={field.key}>
+                    <dt className="text-sm whitespace-nowrap text-base-content/60">
+                      {field.label}
+                    </dt>
+                    <dd className="break-words">
+                      {field.key === "comment" ? (
+                        <CommentText comment={field.value} />
+                      ) : (
+                        field.value
+                      )}
+                    </dd>
+                  </Fragment>
+                ))}
+              </dl>
+            </div>
           </>
         )}
 
-        <form method="dialog" className="border-t border-base-300 px-5 pt-3 pb-safe-bottom">
-          <button className="btn btn-block mb-5">閉じる</button>
-        </form>
+        {transaction && editing && editCapabilities && (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <SingleEditForm
+              key={transaction.id}
+              transaction={transaction}
+              masters={masters}
+              capabilities={editCapabilities}
+              onCancel={() => setEditing(false)}
+            />
+          </div>
+        )}
+
+        {transaction && !editing && canEdit && (
+          <div className="shrink-0 border-t border-base-300 px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+            <button
+              type="button"
+              className="btn btn-primary btn-block"
+              onClick={() => setEditing(true)}
+            >
+              編集
+            </button>
+          </div>
+        )}
       </div>
 
       <form method="dialog" className="modal-backdrop">

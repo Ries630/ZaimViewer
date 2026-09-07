@@ -1,6 +1,6 @@
 # ADR-0037: 一括編集は対象を固定し、画面から一件ずつ実行する
 
-- ステータス: 承認済み
+- ステータス: 廃止（ADR-0038 により置換）
 - 日付: 2026-09-05
 - 関連: [#6](https://github.com/Ries630/ZaimViewer/issues/6)、[#76](https://github.com/Ries630/ZaimViewer/issues/76)、[ADR-0036](0036-refresh-edited-mirror-with-shared-gate.md)
 
@@ -38,3 +38,8 @@ Worker が対象と確認時の値・変更内容を固定した編集計画を 
 ## 再評価の条件
 
 初期上限では普段の編集が繰り返し分断される場合、またはバックグラウンド継続が必要になった場合。
+
+## 置換
+
+シートを閉じる操作と送信停止を分離し、アプリが前景の間は共通 Runner で処理を続けるため、
+[ADR-0038](0038-app-owned-edit-runner.md) により置換した。
