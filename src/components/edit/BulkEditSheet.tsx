@@ -152,6 +152,11 @@ export function BulkEditSheet({
   const [draft, setDraft] = useState<EditDraft>(EMPTY_DRAFT);
   const [selected, setSelected] = useState<ReadonlySet<EditField>>(new Set());
   const [step, setStep] = useState<Step>("form");
+  const contentRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // 入力・確認・結果へ進むたび、前の画面のスクロール位置を持ち越さない。
+    if (contentRef.current) contentRef.current.scrollTop = 0;
+  }, [step]);
   const [changes, setChanges] = useState<EditChanges | null>(null);
   const [plan, setPlan] = useState<EditPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -436,7 +441,7 @@ export function BulkEditSheet({
           </p>
         </div>
 
-        <div className="overflow-y-auto px-5">
+        <div ref={contentRef} className="overflow-y-auto px-5">
           {total !== undefined && items.length === total && !allHaveJpy && (
             <p className="py-4 text-sm text-warning">
               円以外、または通貨を確認できない明細は編集できません。
