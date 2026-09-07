@@ -151,8 +151,12 @@ export function BulkEditSheet({
     });
   };
 
+  // 支出のカテゴリ変更にはジャンルも必須。手動で選んだ欄とは分けて導出する。
+  const effectiveSelected = new Set(selected);
+  if (mode === "payment" && selected.has("category_id")) effectiveSelected.add("genre_id");
+
   const handleReview = async () => {
-    const next = changesFromBulk(selected, draft);
+    const next = changesFromBulk(effectiveSelected, draft);
     setError(null);
     if (!next || Object.keys(next).length === 0) {
       setError("変更する項目を 1 つ以上選択してください");
@@ -274,7 +278,7 @@ export function BulkEditSheet({
                 draft={draft}
                 onChange={setDraft}
                 fields={fields}
-                selected={selected}
+                selected={effectiveSelected}
                 onToggle={toggleField}
               />
               {error && <p className="text-sm text-error">{error}</p>}

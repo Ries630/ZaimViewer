@@ -46,10 +46,12 @@ function accountOptions(masters: Masters | undefined) {
 function FieldLegend({
   field,
   selected,
+  required,
   onToggle,
 }: {
   field: EditField;
   selected: boolean;
+  required: boolean;
   onToggle: (() => void) | undefined;
 }) {
   if (!onToggle) return <legend className="fieldset-legend">{FIELD_LABELS[field]}</legend>;
@@ -59,10 +61,13 @@ function FieldLegend({
         type="checkbox"
         className="checkbox"
         checked={selected}
+        disabled={required}
         onChange={onToggle}
         aria-label={`${FIELD_LABELS[field]}を一括変更`}
       />
-      <span>{FIELD_LABELS[field]}を変更</span>
+      <span>
+        {FIELD_LABELS[field]}を変更{required ? "（カテゴリ変更に必須）" : ""}
+      </span>
     </label>
   );
 }
@@ -138,6 +143,9 @@ export function EditFields({
           <FieldLegend
             field={field}
             selected={isSelected(field)}
+            required={
+              mode === "payment" && field === "genre_id" && selected?.has("category_id") === true
+            }
             onToggle={onToggle ? () => onToggle(field) : undefined}
           />
 
