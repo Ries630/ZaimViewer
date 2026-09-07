@@ -295,6 +295,7 @@ export function BulkEditSheet({
               <p className="text-sm text-base-content/70">
                 変更する項目にチェックを入れ、値を指定してください。
               </p>
+              <p className="text-sm text-base-content/60">日付と金額は一括編集できません。</p>
               <EditFields
                 mode={mode}
                 masters={masters}
@@ -355,7 +356,6 @@ export function BulkEditSheet({
                   </div>
                 ))}
               </dl>
-              <p className="text-sm text-base-content/60">日付と金額は一括編集できません。</p>
               {error && <p className="text-sm text-error">{error}</p>}
               <div className="flex gap-2">
                 <button
