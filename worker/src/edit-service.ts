@@ -125,6 +125,8 @@ function removeMutableKeys(value: Record<string, unknown>, changes: EditChanges)
   const copy = { ...value };
   for (const key of Object.keys(changes)) delete copy[key];
   for (const key of RAW_MUTABLE_KEYS) delete copy[key];
+  // 店舗を変更すると、Zaim が内部の店舗 ID も連動して更新する。
+  if ("place" in changes) delete copy.place_uid;
   return canonicalJson(copy);
 }
 
