@@ -481,7 +481,7 @@ export function BulkEditSheet({
                 <span>{reviewCount} 件に次の変更を適用します。</span>
               </div>
               <div className="rounded-box border border-base-300 p-3">
-                <p className="text-sm font-medium">サーバーが固定した変更前の対象</p>
+                <p className="text-sm font-medium">変更する明細と変更内容</p>
                 <p className="mt-1 text-sm text-base-content/70">
                   対象ごとに変更前後を確認してから保存してください。
                 </p>
@@ -576,7 +576,7 @@ export function BulkEditSheet({
               )}
               {plan.items.some((item) => item.status === "pending") && !stopped && (
                 <button type="button" className="btn" onClick={handleStop} disabled={busy}>
-                  ここで停止
+                  送信を停止
                 </button>
               )}
               {plan.items.some((item) => item.status === "pending") &&

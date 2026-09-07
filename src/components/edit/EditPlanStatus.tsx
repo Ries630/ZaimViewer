@@ -388,7 +388,7 @@ export function EditPlanStatus({ onSettled }: { onSettled: () => void }) {
           )}
           {resuming && executing && (
             <button type="button" className="btn btn-ghost" onClick={stop}>
-              ここで停止
+              送信を停止
             </button>
           )}
         </div>
