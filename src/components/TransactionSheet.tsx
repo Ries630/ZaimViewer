@@ -56,8 +56,6 @@ interface TransactionSheetProps {
   masters?: Masters;
   /** Worker が確認した編集能力。 */
   editCapabilities?: EditCapabilities;
-  /** 保存後に一覧とマスタのキャッシュを更新する。 */
-  onUpdated?: () => void;
 }
 
 /**
@@ -84,7 +82,6 @@ export function TransactionSheet({
   today,
   masters,
   editCapabilities,
-  onUpdated,
 }: TransactionSheetProps) {
   const [editing, setEditing] = useState(false);
 
@@ -153,7 +150,6 @@ export function TransactionSheet({
               masters={masters}
               capabilities={editCapabilities}
               onCancel={() => setEditing(false)}
-              onUpdated={onUpdated ?? (() => undefined)}
             />
           </div>
         )}

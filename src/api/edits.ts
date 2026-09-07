@@ -142,21 +142,3 @@ export function useEditCapabilities() {
     staleTime: Infinity,
   });
 }
-
-/**
- * 編集計画を再読込する。
- *
- * active plan ID だけを sessionStorage に残し、明細データそのものは保存しない。
- * @param id 計画 ID。未指定ならクエリを発行しない。
- */
-export function useEditPlan(id: string | null) {
-  return useQuery({
-    queryKey: ["edit-plan", id],
-    queryFn: () => {
-      if (id === null) throw new Error("編集計画 ID がありません");
-      return getEditPlan(id);
-    },
-    enabled: id !== null,
-    retry: false,
-  });
-}

@@ -2,21 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import {
-  createEditPlan,
-  EditApiError,
-  executeEditPlan,
-  getEditPlan,
-  reconcileEditPlan,
-} from "../../api/edits";
+import { createEditPlan } from "../../api/edits";
 import type { Masters } from "../../api/masters";
 import type { Transaction, TransactionFilter } from "../../api/transactions";
 import { formatAmount } from "../../lib/format";
 import {
   bulkEditableFields,
   changesFromBulk,
-  EDIT_INTERVAL_MS,
-  isEditExecutionUncertain,
   MAX_EDIT_ITEMS,
   previewSnapshot,
   type EditCapabilities,
@@ -27,7 +19,8 @@ import {
 } from "../../lib/edit";
 import { EditFields } from "./EditFields";
 import { EditReview } from "./EditReview";
-import { setActivePlan } from "./EditPlanStatus";
+import { isRunnerBusy } from "../../lib/edit-plan-runner";
+import { useEditRunner } from "./EditPlanProvider";
 import { useEditActivity } from "./useEditActivity";
 
 interface BulkEditSheetProps {
@@ -47,8 +40,6 @@ interface BulkEditSheetProps {
   capabilities: EditCapabilities | undefined;
   /** シートを閉じる。 */
   onCancel: () => void;
-  /** ミラー更新後に一覧を再取得する。 */
-  onUpdated: () => void;
 }
 
 type Step = "form" | "review" | "result";
@@ -107,18 +98,6 @@ function valueText(field: EditField, value: EditDraft, masters: Masters | undefi
   return "（一括変更不可）";
 }
 
-function withUnknown(plan: EditPlan, id: number, message: string): EditPlan {
-  const target = plan.items.find((candidate) => candidate.before.id === id);
-  // GET が送信中を返した場合は、その状態を保ったまま照合へ回す。
-  if (target && target.status !== "pending") return plan;
-  return {
-    ...plan,
-    items: plan.items.map((item) =>
-      item.before.id === id ? { ...item, status: "unknown", message } : item,
-    ),
-  };
-}
-
 /** サーバーが固定した対象を確認画面へ表示する。 */
 function beforeLabel(plan: EditPlan["items"][number]): string {
   const before = plan.before;
@@ -147,8 +126,8 @@ export function BulkEditSheet({
   masters,
   capabilities,
   onCancel,
-  onUpdated,
 }: BulkEditSheetProps) {
+  const { runner, snapshot } = useEditRunner();
   const [draft, setDraft] = useState<EditDraft>(EMPTY_DRAFT);
   const [selected, setSelected] = useState<ReadonlySet<EditField>>(new Set());
   const [step, setStep] = useState<Step>("form");
@@ -161,35 +140,23 @@ export function BulkEditSheet({
   const [plan, setPlan] = useState<EditPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [stopped, setStopped] = useState(false);
   const activity = useEditActivity();
-  const activityRef = useRef(activity);
-  const stopRef = useRef(false);
-  useEffect(() => {
-    activityRef.current = activity;
-  }, [activity]);
-  useEffect(() => {
-    stopRef.current = false;
-    return () => {
-      // シートのアンマウント後に次の明細へ送らない。
-      stopRef.current = true;
-    };
-  }, []);
+  const generationRef = useRef(0);
+  const runnerPlan = snapshot.plan;
+  const runnerBusy = isRunnerBusy(snapshot);
+  const hasUnfinishedRunnerPlan = !snapshot.canStart;
+  const stopped = snapshot.phase === "paused" || snapshot.stopReason !== null;
 
   const handleDialogClose = () => {
-    stopRef.current = true;
-    setStopped(true);
-    if (plan?.items.every((item) => item.status === "succeeded" || item.status === "failed")) {
-      // 完了済みの結果だけを次回へ持ち越さず、次の一括操作をフォームから始める。
-      setDraft(EMPTY_DRAFT);
-      setSelected(new Set());
-      setStep("form");
-      setChanges(null);
-      setPlan(null);
-      setError(null);
-      setStopped(false);
-      setActivePlan(null);
-    }
+    // ダイアログの表示状態だけ破棄し、Runner が管理する送信は継続する。
+    generationRef.current += 1;
+    setDraft(EMPTY_DRAFT);
+    setSelected(new Set());
+    setStep("form");
+    setChanges(null);
+    setPlan(null);
+    setError(null);
+    setBusy(false);
   };
 
   const allHaveReceipt =
@@ -211,7 +178,6 @@ export function BulkEditSheet({
   };
 
   const handleReview = async () => {
-    stopRef.current = false;
     const next = changesFromBulk(selected, draft);
     setError(null);
     if (!next || Object.keys(next).length === 0) {
@@ -222,6 +188,10 @@ export function BulkEditSheet({
       setError("カテゴリを一括変更するときは、ジャンルも選択してください");
       return;
     }
+    if (runnerBusy || hasUnfinishedRunnerPlan) {
+      setError("未完了の編集計画があります。先に一覧の編集計画を解決してください");
+      return;
+    }
     if (activity.blocked) {
       setError(
         activity.hidden ? "画面を表示してから確認してください" : "オフラインのため確認できません",
@@ -229,195 +199,56 @@ export function BulkEditSheet({
       return;
     }
     setBusy(true);
+    const generation = generationRef.current;
     try {
       // 対象のスナップショットは確認画面へ進む時点でサーバーに固定する。
       const created = await createEditPlan({ source: "filter", filter, changes: next });
+      if (generation !== generationRef.current) return;
       setChanges(next);
       setPlan(created);
       setStep("review");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "対象を確認できませんでした");
+      if (generation === generationRef.current) {
+        setError(caught instanceof Error ? caught.message : "対象を確認できませんでした");
+      }
     } finally {
-      setBusy(false);
+      if (generation === generationRef.current) setBusy(false);
     }
   };
 
-  const executeRemaining = async (initial: EditPlan) => {
-    let current = initial;
-    const notifyUpdated = () => {
-      if (current.items.some((item) => item.status === "succeeded")) {
-        onUpdated();
-      }
-    };
-    setPlan(current);
-    setStopped(false);
-    setActivePlan(current.id, current, true);
-    try {
-      for (;;) {
-        if (stopRef.current || activityRef.current.blocked || activity.wasInterrupted()) {
-          if (activityRef.current.blocked) stopRef.current = true;
-          setStopped(true);
-          if (ref.current?.open !== false) setPlan(current);
-          return;
-        }
-        const next = current.items.find((item) => item.status === "pending");
-        if (
-          current.items.some(
-            (item) =>
-              item.status === "sending" ||
-              item.status === "unknown" ||
-              item.status === "mirror_pending",
-          )
-        ) {
-          setError("送信中または結果不明の項目を先に照合してください");
-          setStopped(true);
-          return;
-        }
-        if (!next) {
-          setPlan(current);
-          return;
-        }
-        try {
-          // シート実行中は計画表示からの再開・照合を受け付けない。
-          setActivePlan(current.id, current, true);
-          current = await executeEditPlan(current.id, next.before.id);
-          setPlan(current);
-          setActivePlan(current.id, current, true);
-          notifyUpdated();
-        } catch (caught) {
-          const message = caught instanceof Error ? caught.message : "結果を確認できませんでした";
-          if (!isEditExecutionUncertain(caught instanceof EditApiError ? caught : null)) {
-            setPlan(current);
-            setError(message);
-            setStopped(true);
-            return;
-          }
-          // 送信が届いた可能性を考え、同じ計画を読み直す。execute は再送しない。
-          try {
-            current = withUnknown(await getEditPlan(current.id), next.before.id, message);
-          } catch {
-            current = withUnknown(current, next.before.id, message);
-          }
-          setPlan(current);
-          setActivePlan(current.id, current, true);
-          const confirmed =
-            current.items.find((item) => item.before.id === next.before.id)?.status === "succeeded";
-          setError(confirmed ? null : message);
-          setStopped(
-            current.items.some((item) => item.status !== "succeeded" && item.status !== "failed"),
-          );
-          return;
-        }
-        const result = current.items.find((item) => item.before.id === next.before.id);
-        if (
-          result?.status === "sending" ||
-          result?.status === "unknown" ||
-          result?.status === "mirror_pending"
-        ) {
-          setStopped(true);
-          return;
-        }
-        // Zaim 側への連続要求を詰めず、画面にも進捗を描画する。
-        await new Promise((resolve) => window.setTimeout(resolve, EDIT_INTERVAL_MS));
-      }
-    } finally {
-      notifyUpdated();
-      if (current.items.every((item) => item.status === "succeeded" || item.status === "failed"))
-        setActivePlan(null);
-      else setActivePlan(current.id, current, false);
-    }
-  };
-
-  const handleSave = async () => {
-    if (!changes || !plan || busy) return;
+  const handleSave = () => {
+    if (!changes || !plan || busy || runnerBusy || hasUnfinishedRunnerPlan) return;
     if (activity.blocked) {
       setError(
         activity.hidden ? "画面を表示してから保存してください" : "オフラインのため保存できません",
       );
       return;
     }
-    setBusy(true);
-    activity.resetInterruption();
-    stopRef.current = false;
     setError(null);
-    try {
-      setStep("result");
-      await executeRemaining(plan);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "保存を開始できませんでした");
-    } finally {
-      setBusy(false);
-    }
+    setStep("result");
+    void runner.startPlan(plan);
   };
 
-  const handleResume = async () => {
-    if (!plan || busy || activity.blocked) return;
-    setBusy(true);
-    activity.resetInterruption();
-    stopRef.current = false;
+  const handleResume = () => {
+    if (!runnerPlan || busy || runnerBusy || activity.blocked) return;
     setError(null);
-    try {
-      await executeRemaining(plan);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "再開できませんでした");
-    } finally {
-      setBusy(false);
-    }
+    void runner.resume();
   };
 
   const handleStop = () => {
-    stopRef.current = true;
-    setStopped(true);
+    runner.stop();
   };
 
-  const handleReconcile = async () => {
-    if (!plan || busy) return;
+  const handleReconcile = () => {
+    if (!runnerPlan || busy || runnerBusy) return;
     if (activity.blocked) {
       setError(
         activity.hidden ? "画面を表示してから照合してください" : "オフラインのため照合できません",
       );
       return;
     }
-    const targets = plan.items.filter(
-      (item) =>
-        item.status === "sending" || item.status === "unknown" || item.status === "mirror_pending",
-    );
-    if (targets.length === 0) return;
-    setBusy(true);
-    stopRef.current = false;
     setError(null);
-    let current = plan;
-    let clearActive = false;
-    let updated = false;
-    const notifyUpdated = () => {
-      if (!updated && current.items.some((item) => item.status === "succeeded")) {
-        updated = true;
-        onUpdated();
-      }
-    };
-    setActivePlan(current.id, current, true);
-    try {
-      for (const item of targets) {
-        if (activityRef.current.blocked) {
-          setStopped(true);
-          return;
-        }
-        current = await reconcileEditPlan(current.id, item.before.id);
-        setPlan(current);
-        setActivePlan(current.id, current, true);
-        notifyUpdated();
-      }
-      if (current.items.every((item) => item.status === "succeeded" || item.status === "failed")) {
-        clearActive = true;
-      }
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "照合できませんでした");
-    } finally {
-      notifyUpdated();
-      if (clearActive) setActivePlan(null);
-      else setActivePlan(current.id, current, false);
-      setBusy(false);
-    }
+    void runner.reconcile();
   };
 
   const canOpen = allHaveJpy && fields.length > 0 && total > 0 && total <= MAX_EDIT_ITEMS;
@@ -456,6 +287,11 @@ export function BulkEditSheet({
 
           {step === "form" && canOpen && (
             <div className="flex flex-col gap-3">
+              {hasUnfinishedRunnerPlan && (
+                <p className="text-sm text-warning">
+                  未完了の編集計画があります。先に一覧の編集計画を解決してください。
+                </p>
+              )}
               <p className="text-sm text-base-content/70">
                 変更する項目にチェックを入れ、値を指定してください。
               </p>
@@ -473,7 +309,7 @@ export function BulkEditSheet({
                 type="button"
                 className="btn btn-primary"
                 onClick={() => void handleReview()}
-                disabled={busy}
+                disabled={busy || runnerBusy || hasUnfinishedRunnerPlan}
               >
                 {busy ? "対象を確認中…" : "変更を確認"}
               </button>
@@ -526,8 +362,6 @@ export function BulkEditSheet({
                   type="button"
                   className="btn flex-1"
                   onClick={() => {
-                    // 未実行計画を画面に残さず、次の確認で新しい計画を作る。
-                    setActivePlan(null);
                     setPlan(null);
                     setChanges(null);
                     setStep("form");
@@ -539,8 +373,8 @@ export function BulkEditSheet({
                 <button
                   type="button"
                   className="btn btn-primary flex-1"
-                  onClick={() => void handleSave()}
-                  disabled={busy}
+                  onClick={handleSave}
+                  disabled={busy || runnerBusy || hasUnfinishedRunnerPlan}
                 >
                   {busy ? "保存中…" : "この内容で保存"}
                 </button>
@@ -548,54 +382,56 @@ export function BulkEditSheet({
             </div>
           )}
 
-          {step === "result" && plan && (
+          {step === "result" && (
             <div className="flex flex-col gap-3">
-              <div role="status" className="alert alert-info">
-                <span>{itemStatus(plan)}</span>
-              </div>
-              {stopped && (
-                <p className="text-sm text-warning">
-                  新しい送信を停止しました。送信中または結果不明の項目は先に照合してください。
-                </p>
+              {runnerPlan ? (
+                <>
+                  <div role="status" className="alert alert-info">
+                    <span>{itemStatus(runnerPlan)}</span>
+                  </div>
+                  {stopped && (
+                    <p className="text-sm text-warning">
+                      新しい送信を停止しました。送信中または結果不明の項目は先に照合してください。
+                    </p>
+                  )}
+                  {snapshot.error && <p className="text-sm text-error">{snapshot.error}</p>}
+                  {error && <p className="text-sm text-error">{error}</p>}
+                  {runnerPlan.items.some(
+                    (item) =>
+                      item.status === "sending" ||
+                      item.status === "unknown" ||
+                      item.status === "mirror_pending",
+                  ) && (
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={handleReconcile}
+                      disabled={busy || runnerBusy}
+                    >
+                      {busy || snapshot.phase === "reconciling" ? "照合中…" : "結果を照合"}
+                    </button>
+                  )}
+                  {runnerPlan.items.some((item) => item.status === "pending") && !stopped && (
+                    <button type="button" className="btn" onClick={handleStop} disabled={busy}>
+                      送信を停止
+                    </button>
+                  )}
+                  {runnerPlan.items.some((item) => item.status === "pending") &&
+                    stopped &&
+                    !activity.blocked && (
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={handleResume}
+                        disabled={busy || runnerBusy}
+                      >
+                        残りを再開
+                      </button>
+                    )}
+                </>
+              ) : (
+                <p className="text-sm text-base-content/70">保存を開始しています…</p>
               )}
-              {activity.blocked && (
-                <p className="text-sm text-warning">
-                  オフラインまたはバックグラウンドのため停止中です。
-                </p>
-              )}
-              {error && <p className="text-sm text-error">{error}</p>}
-              {plan.items.some(
-                (item) =>
-                  item.status === "sending" ||
-                  item.status === "unknown" ||
-                  item.status === "mirror_pending",
-              ) && (
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => void handleReconcile()}
-                  disabled={busy}
-                >
-                  {busy ? "照合中…" : "結果を照合"}
-                </button>
-              )}
-              {plan.items.some((item) => item.status === "pending") && !stopped && (
-                <button type="button" className="btn" onClick={handleStop} disabled={busy}>
-                  送信を停止
-                </button>
-              )}
-              {plan.items.some((item) => item.status === "pending") &&
-                stopped &&
-                !activity.blocked && (
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => void handleResume()}
-                    disabled={busy}
-                  >
-                    残りを再開
-                  </button>
-                )}
             </div>
           )}
         </div>

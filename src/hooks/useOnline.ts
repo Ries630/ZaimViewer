@@ -5,6 +5,16 @@
 import { onlineManager } from "@tanstack/react-query";
 import { useSyncExternalStore } from "react";
 
+/** クエリと編集 Runner が共有する現在の接続状態を返す。 */
+export function isOnline(): boolean {
+  return onlineManager.isOnline();
+}
+
+/** 描画を待たずに通信中断を検知するため、共通の接続状態を購読する。 */
+export function subscribeOnline(onChange: () => void): () => void {
+  return onlineManager.subscribe(onChange);
+}
+
 /**
  * 端末がオンラインかどうかを購読する。
  *
@@ -22,8 +32,8 @@ import { useSyncExternalStore } from "react";
  */
 export function useOnline(): boolean {
   return useSyncExternalStore(
-    (onStoreChange) => onlineManager.subscribe(onStoreChange),
-    () => onlineManager.isOnline(),
+    subscribeOnline,
+    isOnline,
     // SSR はしないので呼ばれないが、useSyncExternalStore の契約として渡しておく
     () => true,
   );

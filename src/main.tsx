@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 
 import { SessionExpiredError } from "./api/access";
 import { App } from "./App";
+import { EditPlanProvider } from "./components/edit/EditPlanProvider";
 import "./index.css";
 
 /**
@@ -29,7 +30,9 @@ if (!root) throw new Error("#root が無い");
 createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App />
+      <EditPlanProvider>
+        <App />
+      </EditPlanProvider>
     </QueryClientProvider>
   </StrictMode>,
 );

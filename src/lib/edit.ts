@@ -317,7 +317,7 @@ export function storeActivePlanId(storage: Storage, id: string | null): void {
     if (id === null) storage.removeItem(ACTIVE_EDIT_PLAN_STORAGE_KEY);
     else storage.setItem(ACTIVE_EDIT_PLAN_STORAGE_KEY, id);
   } catch {
-    // 保存できなくても、同一タブ内のイベントによる追跡は続ける。
+    // 保存できなくても、起動中の Runner による追跡は続ける。
   }
 }
 

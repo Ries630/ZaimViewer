@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 
 import { useEditCapabilities } from "./api/edits";
 import { useMasters } from "./api/masters";
@@ -33,7 +32,6 @@ export function App() {
   const meta = useMeta();
   const masters = useMasters();
   const editCapabilities = useEditCapabilities();
-  const queryClient = useQueryClient();
   const [filter, setFilter] = useStoredFilter();
   const online = useOnline();
   const sheet = useRef<HTMLDialogElement>(null);
@@ -86,15 +84,6 @@ export function App() {
   // 件数と合計はページごとに同じ値が返るので、先頭のページから読めばよい
   const totals = transactions.data?.pages[0];
   const bulkMode = filter.modes.length === 1 ? (filter.modes[0] ?? null) : null;
-  const refreshAfterEdit = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: ["transactions"] });
-    void queryClient.invalidateQueries({ queryKey: ["masters"] });
-  }, [queryClient]);
-  const closeAfterSingleEdit = useCallback(() => {
-    refreshAfterEdit();
-    setSelected(null);
-    detail.current?.close();
-  }, [refreshAfterEdit]);
   const bulkReady =
     bulkMode !== null &&
     filter === debounced &&
@@ -140,7 +129,7 @@ export function App() {
           totalAmount={totals?.total_amount}
           singleMode={filter.modes.length === 1}
         />
-        <EditPlanStatus onSettled={refreshAfterEdit} />
+        <EditPlanStatus />
         {bulkMode !== null && totals?.total !== undefined && (
           <div className="flex items-center justify-between gap-3 border-t border-base-200 py-2">
             <p className="text-sm text-base-content/70">
@@ -192,7 +181,6 @@ export function App() {
         today={today}
         masters={mastersData}
         editCapabilities={editCapabilities.data}
-        onUpdated={closeAfterSingleEdit}
       />
 
       {bulkMode !== null && (
@@ -205,7 +193,6 @@ export function App() {
           masters={mastersData}
           capabilities={editCapabilities.data}
           onCancel={() => bulk.current?.close()}
-          onUpdated={refreshAfterEdit}
         />
       )}
 
