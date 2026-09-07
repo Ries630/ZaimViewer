@@ -6,11 +6,14 @@
  * 区別し、表示用の金額をそのまま API に送り込まないようにする。
  */
 
+import * as v from "valibot";
+
 import type { Transaction } from "../api/transactions";
 import {
   MAX_EDIT_ITEMS as CONTRACT_MAX_EDIT_ITEMS,
   EDIT_INTERVAL_MS as CONTRACT_EDIT_INTERVAL_MS,
   snapshotOf as contractSnapshotOf,
+  editDateSchema,
   type EditCapabilities,
   type EditChanges,
   type EditMode,
@@ -129,6 +132,7 @@ export function parseEditAmount(value: string): number | null {
  * @returns 変更された項目だけの値。入力が不正なら null。
  */
 export function changesFromDraft(before: EditSnapshot, draft: EditDraft): EditChanges | null {
+  if (editDateError(draft.date)) return null;
   const amount = parseEditAmount(draft.amount);
   if (amount === null) return null;
 
@@ -334,4 +338,10 @@ export function readActivePlanId(storage: Storage): string | null {
     // 保存値を復元できなければ、未保存として初期化する。
     return null;
   }
+}
+
+/** 編集日付の入力エラーを返す。正常なら null。 */
+export function editDateError(value: string): string | null {
+  if (value === "") return "日付を入力してください";
+  return v.safeParse(editDateSchema, value).success ? null : "実在する日付を入力してください";
 }

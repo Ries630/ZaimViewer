@@ -50,6 +50,10 @@ const capabilities: EditCapabilities = {
 };
 
 describe("編集値の組み立て", () => {
+  it.each(["", "2026-02-30", "2026-9-5"])("不正な日付 %s は確認用の差分にしない", (date) => {
+    const before = snapshotOf(transaction());
+    expect(changesFromDraft(before, { ...draftOf(before), date })).toBeNull();
+  });
   it("snapshot は null の ID と文字列を契約の表現に正規化する", () => {
     expect(snapshotOf(transaction({ category_id: null, name: null }))).toMatchObject({
       category_id: 0,

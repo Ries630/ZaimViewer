@@ -22,7 +22,7 @@ export const editModeSchema = v.picklist(["payment", "income", "transfer"]);
 /** 編集対象の種別。 */
 export type EditMode = v.InferOutput<typeof editModeSchema>;
 /** 実在する暦日。 */
-const dateSchema = v.pipe(
+export const editDateSchema = v.pipe(
   v.string(),
   v.regex(/^\d{4}-\d{2}-\d{2}$/),
   v.check((value) => {
@@ -42,7 +42,7 @@ const textSchema = v.pipe(v.string(), v.maxLength(MAX_EDIT_TEXT_LENGTH));
 /** 編集可能な欄だけを受け付け、未知のキーを拒否する。 */
 export const editChangesSchema = v.pipe(
   v.strictObject({
-    date: v.optional(dateSchema),
+    date: v.optional(editDateSchema),
     amount: v.optional(amountSchema),
     category_id: v.optional(idSchema),
     genre_id: v.optional(idSchema),
@@ -61,7 +61,7 @@ export type EditChanges = v.InferOutput<typeof editChangesSchema>;
 export const editSnapshotSchema = v.strictObject({
   id: idSchema,
   mode: editModeSchema,
-  date: dateSchema,
+  date: editDateSchema,
   amount: amountSchema,
   category_id: existingIdSchema,
   genre_id: existingIdSchema,

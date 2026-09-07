@@ -6,6 +6,7 @@ import type { Masters } from "../../api/masters";
 import type { Transaction } from "../../api/transactions";
 import {
   changesFromDraft,
+  editDateError,
   draftOf,
   editableFields,
   previewSnapshot,
@@ -81,8 +82,14 @@ export function SingleEditForm({
       : [];
   const canEdit = fields.length > 0;
 
+  const dateError = editDateError(draft.date);
+
   const handleReview = () => {
     setError(null);
+    if (dateError) {
+      setError(dateError);
+      return;
+    }
     if (runnerBusy || hasUnfinishedRunnerPlan) {
       setError("未完了の編集計画があります。先に一覧の編集計画を解決してください");
       return;
@@ -299,7 +306,7 @@ export function SingleEditForm({
           type="button"
           className="btn btn-primary flex-1"
           onClick={handleReview}
-          disabled={runnerBusy || hasUnfinishedRunnerPlan}
+          disabled={runnerBusy || hasUnfinishedRunnerPlan || dateError !== null}
         >
           変更を確認
         </button>

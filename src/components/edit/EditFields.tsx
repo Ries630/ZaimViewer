@@ -1,5 +1,8 @@
 /** 単体・一括編集フォームで共用する入力欄。 */
 
+import { useId } from "react";
+import { editDateError } from "../../lib/edit";
+
 import type { Masters } from "../../api/masters";
 import type { EditDraft, EditField, EditMode } from "../../lib/edit";
 import { editMasterOptions, type EditMasterOption } from "../../lib/edit-masters";
@@ -124,6 +127,8 @@ export function EditFields({
   selected,
   onToggle,
 }: EditFieldsProps) {
+  const dateErrorId = useId();
+  const dateError = editDateError(draft.date);
   const categoryMasters = masters ? categoriesForModes(masters.categories, [mode]) : [];
   const genreMasters = masters
     ? genresForCategories(masters.genres, draft.category_id ? [draft.category_id] : [])
@@ -150,13 +155,23 @@ export function EditFields({
           />
 
           {isInputVisible(field) && field === "date" && (
-            <input
-              type="date"
-              className="input w-full text-base"
-              value={draft.date}
-              onChange={(event) => onChange({ ...draft, date: event.target.value })}
-              aria-label="日付"
-            />
+            <>
+              <input
+                type="date"
+                className="input w-full text-base"
+                value={draft.date}
+                onChange={(event) => onChange({ ...draft, date: event.target.value })}
+                aria-label="日付"
+                required
+                aria-invalid={dateError !== null}
+                aria-describedby={dateError ? dateErrorId : undefined}
+              />
+              {dateError && (
+                <p id={dateErrorId} role="alert" className="text-sm text-error">
+                  {dateError}
+                </p>
+              )}
+            </>
           )}
 
           {isInputVisible(field) && field === "amount" && (
