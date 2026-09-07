@@ -138,12 +138,7 @@ export function TransactionSheet({
 
         {transaction && editing && editCapabilities && (
           <div className="overflow-y-auto px-5 pt-5">
-            <div className="mb-3 flex items-baseline justify-between gap-2">
-              <h2 className="text-base font-bold">明細を編集</h2>
-              <button type="button" className="btn btn-ghost" onClick={() => setEditing(false)}>
-                詳細に戻る
-              </button>
-            </div>
+            <h2 className="mb-3 text-base font-bold">明細を編集</h2>
             <SingleEditForm
               key={transaction.id}
               transaction={transaction}
