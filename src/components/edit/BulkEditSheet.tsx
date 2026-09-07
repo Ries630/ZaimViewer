@@ -237,14 +237,14 @@ export function BulkEditSheet({
       onClose={handleDialogClose}
     >
       <div className="modal-box flex max-h-[85vh] flex-col gap-3 p-0">
-        <div className="border-b border-base-300 px-5 pt-5 pb-3">
+        <div className="shrink-0 border-b border-base-300 px-5 pt-5 pb-3">
           <h2 className="text-base font-bold">一括編集</h2>
           <p className="mt-1 text-sm text-base-content/70">
             {targetCount} 件（{mode === "payment" ? "支出" : mode === "income" ? "収入" : "振替"}）
           </p>
         </div>
 
-        <div ref={contentRef} className="overflow-y-auto px-5">
+        <div ref={contentRef} className="min-h-0 overflow-y-auto px-5">
           {total !== undefined && items.length === total && !allHaveJpy && (
             <p className="py-4 text-sm text-warning">
               円以外、または通貨を確認できない明細は編集できません。
@@ -278,14 +278,6 @@ export function BulkEditSheet({
                 onToggle={toggleField}
               />
               {error && <p className="text-sm text-error">{error}</p>}
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => void handleReview()}
-                disabled={busy || runnerBusy || hasUnfinishedRunnerPlan}
-              >
-                {busy ? "対象を確認中…" : "変更を確認"}
-              </button>
             </div>
           )}
 
@@ -398,11 +390,23 @@ export function BulkEditSheet({
           )}
         </div>
 
-        <form method="dialog" className="border-t border-base-300 px-5 pt-3 pb-safe-bottom">
-          <button className="btn btn-block mb-5" onClick={onCancel}>
-            閉じる
-          </button>
-        </form>
+        <div className="shrink-0 border-t border-base-300 px-5 pt-3 pb-safe-bottom">
+          {step === "form" && canOpen && (
+            <button
+              type="button"
+              className="btn btn-primary btn-block mb-2"
+              onClick={() => void handleReview()}
+              disabled={busy || runnerBusy || hasUnfinishedRunnerPlan}
+            >
+              {busy ? "対象を確認中…" : "変更を確認"}
+            </button>
+          )}
+          <form method="dialog">
+            <button className="btn btn-block mb-5" onClick={onCancel}>
+              閉じる
+            </button>
+          </form>
+        </div>
       </div>
       <form method="dialog" className="modal-backdrop">
         <button>閉じる</button>

@@ -127,7 +127,9 @@ export function EditFields({
   const genres = editMasterOptions(genreMasters, draft.genre_id);
   const accounts = accountOptions(masters);
   const isSelected = (field: EditField) => selected?.has(field) ?? true;
-  const isDisabled = (field: EditField) => selected !== undefined && !isSelected(field);
+  // 一括編集では、未選択の欄は見出しだけを残して入力欄を表示しない。
+  // draft は親が保持しているため、再選択すれば入力済みの値を復元できる。
+  const isInputVisible = (field: EditField) => selected === undefined || isSelected(field);
 
   return (
     <div className="flex flex-col gap-2">
@@ -139,18 +141,17 @@ export function EditFields({
             onToggle={onToggle ? () => onToggle(field) : undefined}
           />
 
-          {field === "date" && (
+          {isInputVisible(field) && field === "date" && (
             <input
               type="date"
               className="input w-full text-base"
               value={draft.date}
-              disabled={isDisabled(field)}
               onChange={(event) => onChange({ ...draft, date: event.target.value })}
               aria-label="日付"
             />
           )}
 
-          {field === "amount" && (
+          {isInputVisible(field) && field === "amount" && (
             <input
               type="number"
               inputMode="numeric"
@@ -159,18 +160,17 @@ export function EditFields({
               step={1}
               className="input w-full text-base"
               value={draft.amount}
-              disabled={isDisabled(field)}
               onChange={(event) => onChange({ ...draft, amount: event.target.value })}
               aria-label="金額"
             />
           )}
 
-          {field === "category_id" && (
+          {isInputVisible(field) && field === "category_id" && (
             <MasterSelect
               field={field}
               value={draft.category_id}
               options={categories}
-              disabled={isDisabled(field) || categories.length === 0}
+              disabled={categories.length === 0}
               onChange={(category_id) =>
                 onChange({
                   ...draft,
@@ -189,43 +189,41 @@ export function EditFields({
             />
           )}
 
-          {field === "genre_id" && (
+          {isInputVisible(field) && field === "genre_id" && (
             <MasterSelect
               field={field}
               value={draft.genre_id}
               options={genres}
-              disabled={isDisabled(field) || genres.length === 0}
+              disabled={genres.length === 0}
               onChange={(genre_id) => onChange({ ...draft, genre_id })}
             />
           )}
 
-          {(field === "from_account_id" || field === "to_account_id") && (
+          {isInputVisible(field) && (field === "from_account_id" || field === "to_account_id") && (
             <MasterSelect
               field={field}
               value={draft[field]}
               options={editMasterOptions(accounts, draft[field])}
-              disabled={isDisabled(field) || accounts.length === 0}
+              disabled={accounts.length === 0}
               onChange={(value) => onChange({ ...draft, [field]: value })}
             />
           )}
 
-          {(field === "name" || field === "place") && (
+          {isInputVisible(field) && (field === "name" || field === "place") && (
             <input
               type="text"
               className="input w-full text-base"
               value={draft[field]}
-              disabled={isDisabled(field)}
               maxLength={MAX_EDIT_TEXT_LENGTH}
               onChange={(event) => onChange({ ...draft, [field]: event.target.value })}
               aria-label={FIELD_LABELS[field]}
             />
           )}
 
-          {field === "comment" && (
+          {isInputVisible(field) && field === "comment" && (
             <textarea
               className="textarea min-h-24 w-full text-base"
               value={draft.comment}
-              disabled={isDisabled(field)}
               maxLength={MAX_EDIT_TEXT_LENGTH}
               onChange={(event) => onChange({ ...draft, comment: event.target.value })}
               aria-label="メモ"
